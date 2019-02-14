@@ -700,3 +700,5 @@ func (c *Clique) APIs(chain consensus.ChainReader) []rpc.API {
 		Public:    false,
 	}}
 }
+
+func (dt *Clique) UpdateCurrentCommit(header *types.Header, block *types.Block) {}

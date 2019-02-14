@@ -607,3 +607,5 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 	}
 	state.AddBalance(header.Coinbase, common.SystemAssetID, reward)
 }
+
+func (dt *Ethash) UpdateCurrentCommit(header *types.Header, block *types.Block) {}

@@ -51,6 +51,7 @@ var (
 
 var (
 	emptyUncleHash = types.CalcUncleHash(nil)
+	CurrentCommit = &currentCommit{}
 )
 
 // DaTong wacom
@@ -515,6 +516,10 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results 
 		case <-time.After(delay):
 		}
 
+		if !dt.isCurrentcommit(header, block) {
+			log.Warn("Seal(): Mismatched SealHash")
+			return
+                }
 		select {
 		case results <- block.WithSeal(header):
 		default:
@@ -523,6 +528,39 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results 
 	}()
 
 	return nil
+}
+
+type currentCommit struct {
+        Number      *big.Int       `json:"number"           gencodec:"required"`
+        Hash        common.Hash    `json:"receiptsRoot"     gencodec:"required"`
+        sync.Mutex
+}
+
+func (dt *DaTong) UpdateCurrentCommit(header *types.Header, block *types.Block) {
+        CurrentCommit.Lock()
+        log.Info("UpdateCurrentCommit", "CurrentCommit.Number", CurrentCommit.Number, "header.Number", header.Number)
+        if CurrentCommit.Number == nil || header.Number.Cmp(big.NewInt(1)) == 0 || CurrentCommit.Number.Cmp(header.Number) <= 0 {
+                CurrentCommit.Number = header.Number
+                //CurrentCommit.Hash = header.Root
+                CurrentCommit.Hash = dt.SealHash(block.Header())
+                log.Info("UpdateCurrentCommit", "CurrentCommit", CurrentCommit)
+        }
+        CurrentCommit.Unlock()
+}
+
+func (dt *DaTong) isCurrentcommit(header *types.Header, block *types.Block) bool {
+        CurrentCommit.Lock()
+        defer CurrentCommit.Unlock()
+        log.Info("isCurrentcommit", "CurrentCommit.Number", CurrentCommit.Number, "header.Number(Seal)", header.Number)
+        log.Info("isCurrentcommit", "CurrentCommit.Hash", CurrentCommit.Hash, "header.Hash(Seal)", dt.SealHash(block.Header()))
+        if header.Number.Cmp(big.NewInt(1)) == 0 {
+                return true
+        }
+        if (CurrentCommit.Number.Cmp(header.Number) == 0 &&
+                CurrentCommit.Hash == dt.SealHash(block.Header())) {
+                return true
+        }
+        return false
 }
 
 // SealHash returns the hash of a block prior to it being sealed.
