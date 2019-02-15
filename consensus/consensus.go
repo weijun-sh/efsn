@@ -93,7 +93,8 @@ type Engine interface {
 	// than one result may also be returned depending on the consensus algorothm.
 	Seal(chain ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error
 
-	UpdateCurrentCommit(header *types.Header, block *types.Block)
+	UpdateCurrentCommit(header *types.Header, block *types.Block, fromResult bool)
+	HaveBroaded(header *types.Header, block *types.Block) bool
 
 	// SealHash returns the hash of a block prior to it being sealed.
 	SealHash(header *types.Header) common.Hash

@@ -493,9 +493,12 @@ func (w *worker) taskLoop() {
 			if w.newTaskHook != nil {
 				w.newTaskHook(task)
 			}
+			log.Info("taskCh", "Number", task.block.Header().Number)
 			// Reject duplicate sealing work due to resubmitting.
 			sealHash := w.engine.SealHash(task.block.Header())
+			log.Info("taskCh", "sealHash", sealHash, "prev", prev)
 			if sealHash == prev {
+				log.Warn("taskCh", "sealHash == prev", "continue")
 				continue
 			}
 			// Interrupt previous sealing operation
@@ -503,6 +506,7 @@ func (w *worker) taskLoop() {
 			stopCh, prev = make(chan struct{}), sealHash
 
 			if w.skipSealHook != nil && w.skipSealHook(task) {
+				log.Warn("taskCh", "w.skipSealHook != nil && w.skipSealHook(task)", "continue")
 				continue
 			}
 			w.pendingMu.Lock()
@@ -544,6 +548,10 @@ func (w *worker) resultLoop() {
 				log.Error("Block found but no relative pending task", "number", block.Number(), "sealhash", sealhash, "hash", hash)
 				continue
 			}
+			if w.engine.HaveBroaded(block.Header(), block) {
+				log.Warn("resultLoop", "dt.HaveBroaded", "", "number", block.NumberU64())
+				continue
+			}
 			// Different block could share same sealhash, deep copy here to prevent write-write conflict.
 			var (
 				receipts = make([]*types.Receipt, len(task.receipts))
@@ -565,8 +573,9 @@ func (w *worker) resultLoop() {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
 			}
+			w.engine.UpdateCurrentCommit(w.current.header, block, true)
 			log.Info("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
-				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
+				"elapsed", common.PrettyDuration(time.Since(task.createdAt)), "difficulty", block.Difficulty())
 
 			// Broadcast the block and announce chain insertion event
 			w.mux.Post(core.NewMinedBlockEvent{Block: block})
@@ -931,7 +940,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 	if err != nil {
 		return err
 	}
-	w.engine.UpdateCurrentCommit(w.current.header, block)
+	w.engine.UpdateCurrentCommit(w.current.header, block, false)
 	if w.isRunning() {
 		if interval != nil {
 			interval()

@@ -701,4 +701,7 @@ func (c *Clique) APIs(chain consensus.ChainReader) []rpc.API {
 	}}
 }
 
-func (dt *Clique) UpdateCurrentCommit(header *types.Header, block *types.Block) {}
+func (dt *Clique) UpdateCurrentCommit(header *types.Header, block *types.Block, fromResult bool) {}
+func (dt *Clique) HaveBroaded(header *types.Header, block *types.Block) bool {
+	return false
+}

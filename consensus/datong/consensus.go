@@ -51,7 +51,7 @@ var (
 
 var (
 	emptyUncleHash = types.CalcUncleHash(nil)
-	CurrentCommit = &currentCommit{}
+	CurrentCommit = &currentCommit{Number: new(big.Int).SetUint64(uint64(1)), Size:0, Broaded:false}
 )
 
 // DaTong wacom
@@ -335,7 +335,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	dt.validTicketNumber.SetUint64(number)
 
 	if !haveTicket {
-		log.Error("Miner doesn't have ticket")
+		//log.Error("Miner doesn't have ticket")
 		return nil, errors.New("Miner doesn't have ticket")
 	}
 	parentTime := parent.Time.Uint64()
@@ -509,6 +509,7 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results 
 	copy(header.Extra[len(header.Extra)-extraSeal:], sighash)
 
 	delay := time.Unix(header.Time.Int64(), 0).Sub(time.Now())
+	log.Info("Seal()", "delay", delay)
 	go func() {
 		select {
 		case <-stop:
@@ -516,10 +517,6 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results 
 		case <-time.After(delay):
 		}
 
-		if !dt.isCurrentcommit(header, block) {
-			log.Warn("Seal(): Mismatched SealHash")
-			return
-                }
 		select {
 		case results <- block.WithSeal(header):
 		default:
@@ -528,39 +525,6 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results 
 	}()
 
 	return nil
-}
-
-type currentCommit struct {
-        Number      *big.Int       `json:"number"           gencodec:"required"`
-        Hash        common.Hash    `json:"receiptsRoot"     gencodec:"required"`
-        sync.Mutex
-}
-
-func (dt *DaTong) UpdateCurrentCommit(header *types.Header, block *types.Block) {
-        CurrentCommit.Lock()
-        log.Info("UpdateCurrentCommit", "CurrentCommit.Number", CurrentCommit.Number, "header.Number", header.Number)
-        if CurrentCommit.Number == nil || header.Number.Cmp(big.NewInt(1)) == 0 || CurrentCommit.Number.Cmp(header.Number) <= 0 {
-                CurrentCommit.Number = header.Number
-                //CurrentCommit.Hash = header.Root
-                CurrentCommit.Hash = dt.SealHash(block.Header())
-                log.Info("UpdateCurrentCommit", "CurrentCommit", CurrentCommit)
-        }
-        CurrentCommit.Unlock()
-}
-
-func (dt *DaTong) isCurrentcommit(header *types.Header, block *types.Block) bool {
-        CurrentCommit.Lock()
-        defer CurrentCommit.Unlock()
-        log.Info("isCurrentcommit", "CurrentCommit.Number", CurrentCommit.Number, "header.Number(Seal)", header.Number)
-        log.Info("isCurrentcommit", "CurrentCommit.Hash", CurrentCommit.Hash, "header.Hash(Seal)", dt.SealHash(block.Header()))
-        if header.Number.Cmp(big.NewInt(1)) == 0 {
-                return true
-        }
-        if (CurrentCommit.Number.Cmp(header.Number) == 0 &&
-                CurrentCommit.Hash == dt.SealHash(block.Header())) {
-                return true
-        }
-        return false
 }
 
 // SealHash returns the hash of a block prior to it being sealed.
@@ -781,3 +745,69 @@ func GenGenesisExtraData(number *big.Int) []byte {
 	data = append(data, bytes.Repeat([]byte{0x00}, extraSeal)...)
 	return data
 }
+
+type currentCommit struct {
+        Number      *big.Int       `json:"number"           gencodec:"required"`
+        Hash        [20]common.Hash    `json:"receiptsRoot"     gencodec:"required"`
+	Size        int
+	Broaded     bool//have process: seal and broad
+        sync.Mutex
+}
+
+func (dt *DaTong) UpdateCurrentCommit(header *types.Header, block *types.Block, fromResult bool) {
+        CurrentCommit.Lock()
+        defer CurrentCommit.Unlock()
+        log.Info("UpdateCurrentCommit", "CurrentCommit.Number(old)", CurrentCommit.Number)
+	//log.Info("UpdateCurrentCommit", "CurrentCommit.Hash(old)", CurrentCommit.Hash)
+	log.Info("UpdateCurrentCommit", "difficulty", block.Difficulty())
+	if fromResult == true {
+		if block.Coinbase() != dt.signer {//from sync
+			return
+		}
+		if dt.isCommit(header, block) == true {
+			CurrentCommit.Broaded = true
+			CurrentCommit.Size = 0
+		}
+		return
+	}
+	if header.Number.Cmp(CurrentCommit.Number) > 0 {
+		CurrentCommit.Broaded = false
+		CurrentCommit.Size = 0
+	}
+        if header.Number.Cmp(CurrentCommit.Number) >= 0 {
+		if CurrentCommit.Broaded == true {
+			CurrentCommit.Size = 0
+			return
+		}
+		number := *header.Number
+		CurrentCommit.Number = new(big.Int).Set(&number)
+		CurrentCommit.Hash[CurrentCommit.Size] = dt.SealHash(block.Header())
+		log.Info("UpdateCurrentCommit", "CurrentCommit.Number", CurrentCommit.Number)
+		log.Info("UpdateCurrentCommit", "size", CurrentCommit.Size, "CurrentCommit.Hash", CurrentCommit.Hash[CurrentCommit.Size])
+		if CurrentCommit.Size < 19 {
+			CurrentCommit.Size++
+		}
+        }
+}
+
+func (dt *DaTong) isCommit(header *types.Header, block *types.Block) bool{
+	if header.Number.Cmp(CurrentCommit.Number) != 0 {
+		return false
+	}
+	for i := 0; i < CurrentCommit.Size; i++ {
+		if CurrentCommit.Hash[i] == dt.SealHash(block.Header()) {
+			return true
+		}
+	}
+	return false
+}
+
+func (dt *DaTong) HaveBroaded(header *types.Header, block *types.Block) bool {
+	if block.Coinbase() != dt.signer {//from sync
+		return false
+	}
+        CurrentCommit.Lock()
+        defer CurrentCommit.Unlock()
+	return header.Number.Cmp(CurrentCommit.Number) == 0 && CurrentCommit.Broaded
+}
+
