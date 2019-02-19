@@ -23,6 +23,10 @@ import (
 	"github.com/FusionFoundation/efsn/rpc"
 )
 
+const (
+	wiggleTime = 500 * time.Millisecond // Random delay (per commit) to allow concurrent commits
+)
+
 var (
 	errUnknownBlock = errors.New("unknown block")
 
@@ -508,6 +512,13 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results 
 	copy(header.Extra[len(header.Extra)-extraSeal:], sighash)
 
 	delay := time.Unix(header.Time.Int64(), 0).Sub(time.Now())
+	log.Info("Seal", "header.Time", header.Time, "time.Now()", time.Now().Unix())
+	if header.Number.Cmp(common.Big1) > 0 && delay < 0 {
+		log.Info("Seal()", "delay", delay)
+		delay = time.Duration(int64(wiggleTime))
+		//return errors.New("delay is < 0")
+	}
+	log.Info("Seal()", "delay", delay)
 	go func() {
 		select {
 		case <-stop:
@@ -517,6 +528,8 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results 
 
 		select {
 		case results <- block.WithSeal(header):
+			// One of the threads found a block, abort all others
+			stop = make(chan struct{})
 		default:
 			log.Warn("Sealing result is not read by miner", "sealhash", dt.SealHash(header))
 		}
