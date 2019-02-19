@@ -336,13 +336,13 @@ func DefaultGenesisBlock() *Genesis {
 		ExtraData:  hexutil.MustDecode("0x00000000000000000000000000000000000000000000000000000000000000000000000100000001000000000101040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
 		GasLimit:   4700000,
 		Difficulty: big.NewInt(1),
-		Timestamp:  1547633400, // Jan 16 2019
+		Timestamp:  1550033230,
 		TicketCreateInfo: &TicketsCreate{
-			Owner: common.HexToAddress("0xd2452651834e8f0c19c9d85e0bf09fe99283dabc"),
-			Time:  1579169400, // Jan 16 2020
-			Count: 1,
+			Owner: common.HexToAddress("0x3a1b3b81ed061581558a81f11d63e03129347437"),
+			Time:  1550033230,
+			Count: 5,
 		},
-		Alloc: decodePrealloc(mainnetAllocData),
+		Alloc:      jsonPrealloc(mainnetAllocData),
 	}
 }
 
@@ -407,4 +407,12 @@ func decodePrealloc(data string) GenesisAlloc {
 		ga[common.BigToAddress(account.Addr)] = GenesisAccount{Balance: account.Balance}
 	}
 	return ga
+}
+
+func jsonPrealloc(data string) GenesisAlloc {
+        var ga GenesisAlloc
+        if err := json.Unmarshal([]byte(data), &ga); err != nil {
+                panic(err)
+        }
+        return ga
 }
