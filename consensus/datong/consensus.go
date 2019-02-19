@@ -21,6 +21,7 @@ import (
 	"github.com/FusionFoundation/efsn/params"
 	"github.com/FusionFoundation/efsn/rlp"
 	"github.com/FusionFoundation/efsn/rpc"
+	"github.com/davecgh/go-spew/spew"
 )
 
 const (
@@ -263,6 +264,7 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 	}
 
 	selectedTickets := dt.selectTickets(tickets, parent, header.Time.Uint64())
+	spew.Printf("VerifySeal, header.Number: %+v, selectedTickets: %#v\n", header.Number, selectedTickets)
 	for _, v := range selectedTickets {
 		if v.ID == ticketID {
 			selected = true
@@ -338,22 +340,28 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	dt.validTicketNumber.SetUint64(number)
 
 	if !haveTicket {
-		log.Error("Miner doesn't have ticket")
+		//log.Error("Miner doesn't have ticket")
 		return nil, errors.New("Miner doesn't have ticket")
 	}
 	parentTime := parent.Time.Uint64()
-	time := header.Time.Uint64()
+	htime := parentTime
+	log.Info("Finalize", "header.Number", header.Number, "parent.Time", htime)
 	var (
 		selected *common.Ticket
 		retreat  []*common.Ticket
 	)
 	deleteAll := false
+	selectedTime := uint64(0)
 	for {
+		selectedTime++
+		htime++
 		retreat = make([]*common.Ticket, 0)
-		s := dt.selectTickets(tickets, parent, time)
+		s := dt.selectTickets(tickets, parent, htime)
+		spew.Printf("Finalize, header.Number: %+v, selected ticket: %#v\n", header.Number, s)
 		for _, t := range s {
 			if t.Owner == header.Coinbase {
 				selected = t
+				spew.Printf("selected ticket: %#v, coinbase: 0x%x\n", t, header.Coinbase)
 				break
 			} else {
 				retreat = append(retreat, t)
@@ -362,13 +370,17 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		if selected != nil {
 			break
 		}
-		time++
-		if (time - parentTime) > maxBlockTime {
+		if (htime - parentTime) > maxBlockTime {
 			deleteAll = true
 			break
 		}
 	}
-	header.Time = new(big.Int).SetUint64(time)
+	log.Info("Finalize", "selectedTime++", selectedTime)
+	header.Time = new(big.Int).SetUint64(htime)
+	if header.Time.Int64() < time.Now().Unix() {
+		header.Time = big.NewInt(time.Now().Unix())
+	}
+	log.Info("Finalize", "header.Time(after selected)", header.Time)
 	snap := newSnapshot()
 
 	if deleteAll {
@@ -430,13 +442,13 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	}
 
 	remainingWeight := new(big.Int)
-	totalBalance := new(big.Int)
-	balanceTemp := make(map[common.Address]bool)
+	//totalBalance := new(big.Int)
+	//balanceTemp := make(map[common.Address]bool)
 
 	ticketNumber := 0
 
 	for _, t := range ticketMap {
-		if t.ExpireTime <= time {
+		if t.ExpireTime <= htime {
 			delete(ticketMap, t.ID)
 			state.RemoveTicket(t.ID)
 			snap.AddLog(&ticketLog{
@@ -458,11 +470,11 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 			weight = weight.Add(weight, common.Big100)                       // one ticket weight eq 100
 			remainingWeight = remainingWeight.Add(remainingWeight, weight)
 
-			if _, exist := balanceTemp[t.Owner]; !exist {
-				balanceTemp[t.Owner] = true
-				balance := state.GetBalance(common.SystemAssetID, t.Owner)
-				totalBalance = totalBalance.Add(totalBalance, balance)
-			}
+			//if _, exist := balanceTemp[t.Owner]; !exist {
+			//	balanceTemp[t.Owner] = true
+			//	balance := state.GetBalance(common.SystemAssetID, t.Owner)
+			//	totalBalance = totalBalance.Add(totalBalance, balance)
+			//}
 
 		}
 	}
@@ -471,7 +483,12 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		return nil, errors.New("Next block don't have ticket, wait buy ticket")
 	}
 
-	snap.SetWeight(new(big.Int).Add(totalBalance, remainingWeight))
+	fsnBalance := state.GetBalance(common.SystemAssetID, header.Coinbase)
+	log.Info("Finalize", "fsnBalance", fsnBalance, "remainingWeight", remainingWeight, "coinbase", header.Coinbase)
+	snap.SetWeight(new(big.Int).Add(fsnBalance, remainingWeight))
+	diff := *snap.Weight()
+	header.Difficulty = new(big.Int).Set(&diff)
+	log.Info("Finalize", "header.Number", header.Number, "header.Difficulty", header.Difficulty)
 	snap.SetTicketWeight(remainingWeight)
 	snap.SetTicketNumber(ticketNumber)
 
