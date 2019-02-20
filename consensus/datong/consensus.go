@@ -303,12 +303,10 @@ func (dt *DaTong) Prepare(chain consensus.ChainReader, header *types.Header) err
 	return nil
 }
 
-func calcTotalBalance(tickets []*common.Ticket, coinbase common.Address, state *state.StateDB) *big.Int {
+// calc tickets total balance
+func calcTotalBalance(tickets []*common.Ticket, state *state.StateDB) *big.Int {
 	total := new(big.Int).SetUint64(uint64(0))
 	for _, t := range tickets {
-		if coinbase != (common.Address{}) && t.Owner == coinbase {// add before tickets
-			break
-		}
 		balance := state.GetBalance(common.SystemAssetID, t.Owner)
 		total = total.Add(total, balance)
 		log.Info("Finalize", "total", total, "balance", balance, "t.Owner", t.Owner, "t.ID", t.ID)
@@ -363,7 +361,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		//log.Error("Miner doesn't have ticket")
 		return nil, errors.New("Miner doesn't have ticket")
 	}
-	allTicketsTotalBalance := calcTotalBalance(tickets, common.Address{}, state)
+	allTicketsTotalBalance := calcTotalBalance(tickets, state)
 	parentTime := parent.Time.Uint64()
 	htime := parentTime
 	var (
@@ -397,12 +395,10 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 				i := 0
 				for _, nt := range selectedList {
 					log.Warn("append", "nt.ID", nt.ID, "t.ID", t.ID)
-					if t.ID != nt.ID {
-						selectedNoSameTicket = append(selectedNoSameTicket, t)
-					}else {
+					if t.ID == nt.ID {
+						i = 1
 						break
 					}
-					i++
 				}
 				if i == 0 {
 					selectedNoSameTicket = append(selectedNoSameTicket, t)
@@ -546,7 +542,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 
 	// cacl difficulty
 	log.Info("Finalize", "selectedList", selectedList, "header.Number", header.Number, "coinbase", header.Coinbase)
-	ticketsTotalBalance := calcTotalBalance(selectedList, header.Coinbase, state)
+	ticketsTotalBalance := calcTotalBalance(selectedList, state)
 	log.Info("Finalize", "allTicketsTotalBalance", allTicketsTotalBalance, "ticketsTotalBalance", ticketsTotalBalance, "header.Number", header.Number)
 	ticketsTotal := new(big.Int).Sub(allTicketsTotalBalance, ticketsTotalBalance)
 	header.Difficulty = new(big.Int).Set(ticketsTotal)
