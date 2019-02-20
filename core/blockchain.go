@@ -1241,6 +1241,10 @@ func (st *insertStats) report(chain []*types.Block, index int, cache common.Stor
 			"blocks", st.processed, "txs", txs, "mgas", float64(st.usedGas) / 1000000,
 			"elapsed", common.PrettyDuration(elapsed), "mgasps", float64(st.usedGas) * 1000 / float64(elapsed),
 			"number", end.Number(), "hash", end.Hash(), "cache", cache,
+			"difficulty", end.Difficulty(),
+			"miner", end.Coinbase(),
+			"parentHash", end.ParentHash(),
+			"time", end.Time(),
 		}
 		if st.queued > 0 {
 			context = append(context, []interface{}{"queued", st.queued}...)
@@ -1346,6 +1350,7 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	// Insert the new chain, taking care of the proper incremental order
 	var addedTxs types.Transactions
 	for i := len(newChain) - 1; i >= 0; i-- {
+		log.Warn("reorg, newChain", "number", newChain[i].NumberU64(), "parentHash", newChain[i].ParentHash())
 		// insert the block in the canonical way, re-writing history
 		bc.insert(newChain[i])
 		// write lookup entries for hash based transaction/receipt searches
