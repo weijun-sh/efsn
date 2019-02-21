@@ -564,7 +564,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	}
 	erru := updateSelectedTicketTime(header, ticketID, new(big.Int).SetUint64(htime))
 	if erru != nil {
-		return nil, errors.New("Finalize ticket selected used")
+		//return nil, errors.New("Finalize ticket selected used")
 	}
 	header.Difficulty = difficulty
 	log.Info("Finalize", "header.Number", header.Number, "header.Difficulty", header.Difficulty)
@@ -921,3 +921,219 @@ func haveSelectedTicketTime(header *types.Header) (*big.Int, error) {
 	return new(big.Int).SetUint64(uint64(0)), errors.New("Mismatched SealHash")
 }
 
+func (dt *DaTong) verifyCalcDifficultyAndTicket(chain consensus.ChainReader, header *types.Header, state *state.StateDB) (*big.Int, common.Hash, uint64, *snapshot, error) {
+	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
+	if parent == nil {
+		return nil, common.Hash{}, uint64(0), nil, consensus.ErrUnknownAncestor
+	}
+
+	ticketMap, err := state.AllTickets()
+	if err != nil {
+		log.Error("unable to retrieve tickets in Finalize:Consensus.go")
+		return nil, common.Hash{}, uint64(0), nil, err
+	}
+
+	if len(ticketMap) == 1 {
+		log.Error("Next block doesn't have ticket, wait buy ticket")
+		return nil, common.Hash{}, uint64(0), nil, errors.New("Next block doesn't have ticket, wait buy ticket")
+	}
+
+	//log.Warn("Finalize", "ticketMap", ticketMap)
+	tickets := make([]*common.Ticket, 0)
+	haveTicket := false
+
+	var weight, number uint64
+
+	for _, v := range ticketMap {
+		if v.Height.Cmp(header.Number) < 0 {
+			if v.Owner == header.Coinbase {
+				number++
+				weight += header.Number.Uint64() - v.Height.Uint64() + 1
+				haveTicket = true
+			}
+			temp := v
+			tickets = append(tickets, &temp)
+		}
+	}
+
+	dt.weight.SetUint64(weight)
+	dt.validTicketNumber.SetUint64(number)
+
+	if !haveTicket {
+		//log.Error("Miner doesn't have ticket")
+		return nil, common.Hash{}, uint64(0), nil, errors.New("Miner doesn't have ticket")
+	}
+	parentTime := parent.Time.Uint64()
+	htime := parentTime
+	var (
+		selected *common.Ticket
+		retreat  []*common.Ticket
+		selectedList  []*common.Ticket
+		selectedNoSameTicket  []*common.Ticket
+	)
+	deleteAll := false
+	selectedTime := int64(0)
+	selectedList = make([]*common.Ticket, 0)//TODO
+	for {
+		htime++
+		selectedTime++
+		retreat = make([]*common.Ticket, 0)
+		selectedNoSameTicket = make([]*common.Ticket, 0)//TODO
+		s := dt.selectTickets(tickets, parent, htime)
+		spew.Printf("Finalize, parent.Number: %+v, htime: %+v, selected ticket: %#v\n", *parent.Number, htime, s)
+		for _, t := range s {
+			if t.Owner == header.Coinbase {
+				selected = t
+				spew.Printf("selected ticket: %#v, coinbase: 0x%x\n", t, header.Coinbase)
+				break
+			} else {
+				retreat = append(retreat, t)
+				i := 0
+				for _, nt := range selectedList {
+					log.Warn("append", "nt.ID", nt.ID, "t.ID", t.ID)
+					if t.ID == nt.ID {
+						i = 1
+						break
+					}
+				}
+				if i == 0 {
+					selectedNoSameTicket = append(selectedNoSameTicket, t)
+				}
+			}
+		}
+		log.Warn("add", "selectedNoSameTicket", selectedNoSameTicket)
+		for _, mt := range selectedNoSameTicket {
+			// store tickets the different
+			selectedList = append(selectedList, mt)
+		}
+		if selected != nil {
+			break
+		}
+		if (htime - parentTime) > maxBlockTime {
+			deleteAll = true
+			break
+		}
+	}
+	log.Info("Finalize", "selectedTime++", selectedTime)
+	if selected == nil {
+		return nil, common.Hash{}, uint64(0), nil, errors.New("Finalize no ticket selected in maxBlockTime")
+	}
+	allTicketsTotalBalance := calcTotalBalance(tickets, state)
+	//snap := newSnapshot()
+
+	if deleteAll {
+	//	snap.AddLog(&ticketLog{
+	//		TicketID: common.BytesToHash(header.Coinbase[:]),
+	//		Type:     ticketSelect,
+	//	})
+
+	//	for _, t := range ticketMap {
+	//		if t.Height.Cmp(header.Number) < 0 {
+	//			delete(ticketMap, t.ID)
+	//			state.RemoveTicket(t.ID)
+	//			snap.AddLog(&ticketLog{
+	//				TicketID: t.ID,
+	//				Type:     ticketDelete,
+	//			})
+	//			if t.Height.Cmp(common.Big0) > 0 {
+	//				value := common.NewTimeLock(&common.TimeLockItem{
+	//					StartTime: t.StartTime,
+	//					EndTime:   t.ExpireTime,
+	//					Value:     t.Value,
+	//				})
+	//				state.AddTimeLockBalance( t.Owner, common.SystemAssetID, value)
+	//			}
+	//		}
+	//	}
+	//} else {
+	//	delete(ticketMap, selected.ID)
+	//	state.RemoveTicket(selected.ID)
+	//	if selected.Height.Cmp(common.Big0) > 0 {
+	//		value := common.NewTimeLock(&common.TimeLockItem{
+	//			StartTime: selected.StartTime,
+	//			EndTime:   selected.ExpireTime,
+	//			Value:     selected.Value,
+	//		})
+	//		state.AddTimeLockBalance(selected.Owner, common.SystemAssetID, value)
+	//	}
+	//	snap.AddLog(&ticketLog{
+	//		TicketID: selected.ID,
+	//		Type:     ticketSelect,
+	//	})
+
+	//	for _, t := range retreat {
+	//		delete(ticketMap, t.ID)
+	//		state.RemoveTicket(t.ID)
+	//		if t.Height.Cmp(common.Big0) > 0 {
+	//			value := common.NewTimeLock(&common.TimeLockItem{
+	//				StartTime: t.StartTime,
+	//				EndTime:   t.ExpireTime,
+	//				Value:     t.Value,
+	//			})
+	//			state.AddTimeLockBalance(t.Owner, common.SystemAssetID, value)
+	//		}
+	//		snap.AddLog(&ticketLog{
+	//			TicketID: t.ID,
+	//			Type:     ticketRetreat,
+	//		})
+	//	}
+	}
+
+	//remainingWeight := new(big.Int)
+	//totalBalance := new(big.Int)
+	//balanceTemp := make(map[common.Address]bool)
+
+	//ticketNumber := 0
+
+	////log.Warn("Finalize AllTickets update", "ticketMap", ticketMap)
+	//for _, t := range ticketMap {
+	//	if t.ExpireTime <= htime {
+	//		delete(ticketMap, t.ID)
+	//		state.RemoveTicket(t.ID)
+	//		snap.AddLog(&ticketLog{
+	//			TicketID: t.ID,
+	//			Type:     ticketExpired,
+	//		})
+	//		if t.Height.Cmp(common.Big0) > 0 {
+	//			value := common.NewTimeLock(&common.TimeLockItem{
+	//				StartTime: t.StartTime,
+	//				EndTime:   t.ExpireTime,
+	//				Value:     t.Value,
+	//			})
+	//			state.AddTimeLockBalance( t.Owner, common.SystemAssetID, value)
+	//		}
+	//	} else {
+	//		ticketNumber++
+	//		weight := new(big.Int).Sub(header.Number, t.Height)
+	//		weight = weight.Mul(weight, big.NewInt(int64(ticketWeightStep))) // one ticket every block add weight eq number * setp
+	//		weight = weight.Add(weight, common.Big100)                       // one ticket weight eq 100
+	//		remainingWeight = remainingWeight.Add(remainingWeight, weight)
+
+	//		//log.Info("Finalize", "t.Owner", t.Owner)
+	//		if _, exist := balanceTemp[t.Owner]; !exist {
+	//			balanceTemp[t.Owner] = true
+	//			balance := state.GetBalance(common.SystemAssetID, t.Owner)
+	//			totalBalance = totalBalance.Add(totalBalance, balance)
+	//			//log.Info("Finalize", "totalBalance", totalBalance, "balance", balance, "t.Owner", t.Owner)
+	//		}
+
+	//	}
+	//}
+
+	//if remainingWeight.Cmp(common.Big0) <= 0 {
+	//	return nil, common.Hash{}, uint64(0), nil, errors.New("Next block don't have ticket, wait buy ticket")
+	//}
+
+	//// add balance before selected ticket from stored tickets list
+
+	//snap.SetWeight(new(big.Int).Add(totalBalance, remainingWeight))
+	//snap.SetTicketWeight(remainingWeight)
+	//snap.SetTicketNumber(ticketNumber)
+
+	// cacl difficulty
+	log.Info("Finalize", "selectedList", selectedList, "header.Number", header.Number, "coinbase", header.Coinbase)
+	ticketsTotalBalance := calcTotalBalance(selectedList, state)
+	log.Info("Finalize", "allTicketsTotalBalance", allTicketsTotalBalance, "ticketsTotalBalance", ticketsTotalBalance, "header.Number", header.Number)
+	ticketsTotal := new(big.Int).Sub(allTicketsTotalBalance, ticketsTotalBalance)
+	return new(big.Int).Set(ticketsTotal), selected.ID, htime, nil/*snap*/, nil
+}

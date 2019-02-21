@@ -16,6 +16,9 @@ efsn:
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/efsn\" to launch efsn."
 
+bootnode:
+	build/env.sh go run build/ci.go install ./cmd/bootnode
+
 debug:
 	# https://ethereum.stackexchange.com/questions/41489/how-to-debug-geth-with-delve?rq=1
 	@echo building debug version
@@ -28,8 +31,8 @@ swarm:
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/swarm\" to launch swarm."
 
-all:
-	build/env.sh go run build/ci.go install
+all: efsn bootnode
+	#build/env.sh go run build/ci.go install
 
 android:
 	build/env.sh go run build/ci.go aar --local

@@ -566,7 +566,7 @@ func (w *worker) resultLoop() {
 				continue
 			}
 			log.Info("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
-				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
+				"elapsed", common.PrettyDuration(time.Since(task.createdAt)), "difficulty", block.Difficulty(), "time", block.Time())
 
 			// Broadcast the block and announce chain insertion event
 			w.mux.Post(core.NewMinedBlockEvent{Block: block})
