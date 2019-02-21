@@ -55,7 +55,6 @@ var (
 	maxBlockTime     uint64 = 120 // 2 minutes
 	ticketWeightStep        = 2   // 2%
 	SelectedTicketTime = &selectedTicketTime{time: make(map[common.Hash]*big.Int)}
-	SealOnce = &sealOnce{}
 )
 
 var (
@@ -553,10 +552,6 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	return types.NewBlock(header, txs, nil, receipts), nil
 }
 
-type sealOnce struct {
-        sync.Mutex
-}
-
 // Seal generates a new sealing request for the given input block and pushes
 // the result into the given channel.
 //
@@ -606,23 +601,10 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results 
 		case <-time.After(delay):
 		}
 
-		// if header.Number from sync, abort all seal
-		//hheader := chain.GetHeaderByNumber(header.Number.Uint64())
-		//if hheader != nil {
-		//	log.Warn("Seal()", "header.Number", header.Number.Uint64(), "synced", "abort other seals")
-		//	stop = make(chan struct{})
-		//	return
-		//}
-
-		SealOnce.Lock()
 		select {
-		case <-stop:
-			SealOnce.Unlock()
-			return
 		case results <- block.WithSeal(header):
 			// One of the threads found a block, abort all others
 			stop = make(chan struct{})
-			SealOnce.Unlock()
 		default:
 			log.Warn("Sealing result is not read by miner", "sealhash", dt.SealHash(header))
 		}
