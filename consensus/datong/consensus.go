@@ -59,6 +59,7 @@ var (
 
 var (
 	emptyUncleHash = types.CalcUncleHash(nil)
+	CurrentCommit = &currentCommit{Number: new(big.Int).SetUint64(uint64(1)), Size:0, Broaded:false}
 )
 
 // DaTong wacom
@@ -881,3 +882,67 @@ func haveSelectedTicketTime(header *types.Header) (*big.Int, error) {
 	return new(big.Int).SetUint64(uint64(0)), errors.New("Mismatched SealHash")
 }
 
+type currentCommit struct {
+        Number      *big.Int       `json:"number"           gencodec:"required"`
+        Hash        [20]common.Hash    `json:"receiptsRoot"     gencodec:"required"`
+	Size        int
+	Broaded     bool//have process: seal and broad
+        sync.Mutex
+}
+
+func (dt *DaTong) UpdateCurrentCommit(header *types.Header, block *types.Block, fromResult bool) {
+        CurrentCommit.Lock()
+        defer CurrentCommit.Unlock()
+        log.Info("UpdateCurrentCommit", "CurrentCommit.Number(old)", CurrentCommit.Number)
+	//log.Info("UpdateCurrentCommit", "CurrentCommit.Hash(old)", CurrentCommit.Hash)
+	log.Info("UpdateCurrentCommit", "difficulty", block.Difficulty())
+	if fromResult == true {
+		if block.Coinbase() != dt.signer {//from sync
+			return
+		}
+		if dt.isCommit(header, block) == true {
+			CurrentCommit.Broaded = true
+			CurrentCommit.Size = 0
+		}
+		return
+	}
+	if header.Number.Cmp(CurrentCommit.Number) > 0 {
+		CurrentCommit.Broaded = false
+		CurrentCommit.Size = 0
+	}
+        if header.Number.Cmp(CurrentCommit.Number) >= 0 {
+		if CurrentCommit.Broaded == true {
+			CurrentCommit.Size = 0
+			return
+		}
+		number := *header.Number
+		CurrentCommit.Number = new(big.Int).Set(&number)
+		CurrentCommit.Hash[CurrentCommit.Size] = dt.SealHash(block.Header())
+		log.Info("UpdateCurrentCommit", "CurrentCommit.Number", CurrentCommit.Number)
+		log.Info("UpdateCurrentCommit", "size", CurrentCommit.Size, "CurrentCommit.Hash", CurrentCommit.Hash[CurrentCommit.Size])
+		if CurrentCommit.Size < 19 {
+			CurrentCommit.Size++
+		}
+        }
+}
+
+func (dt *DaTong) isCommit(header *types.Header, block *types.Block) bool{
+	if header.Number.Cmp(CurrentCommit.Number) != 0 {
+		return false
+	}
+	for i := 0; i < CurrentCommit.Size; i++ {
+		if CurrentCommit.Hash[i] == dt.SealHash(block.Header()) {
+			return true
+		}
+	}
+	return false
+}
+
+func (dt *DaTong) HaveBroaded(header *types.Header, block *types.Block) bool {
+	if block.Coinbase() != dt.signer {//from sync
+		return false
+	}
+        CurrentCommit.Lock()
+        defer CurrentCommit.Unlock()
+	return header.Number.Cmp(CurrentCommit.Number) == 0 && CurrentCommit.Broaded
+}
