@@ -27,7 +27,6 @@ import (
 
 const (
 	wiggleTime = 500 * time.Millisecond // Random delay (per commit) to allow concurrent commits
-	modifier = uint64(80960000) // 80960000 * e 18
 )
 
 var (
@@ -289,7 +288,7 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 		log.Info("consensus.go getAllTickets state not found for parent root ", "err", err.Error())
 		return err
 	}
-	difficulty, selectedTicketID, _, errd := dt.calcDifficulty(chain, header, state)
+	difficulty, selectedTicketID, _, errd := dt.calcDifficultyAndTicket(chain, header, state)
 	if errd != nil {
 		return errd
 	}
@@ -328,13 +327,14 @@ func calcTotalBalance(tickets []*common.Ticket, state *state.StateDB) *big.Int {
 	total := new(big.Int).SetUint64(uint64(0))
 	for _, t := range tickets {
 		balance := state.GetBalance(common.SystemAssetID, t.Owner)
+		balance.Div(balance, new(big.Int).SetUint64(uint64(1e+18)))
 		total = total.Add(total, balance)
 		log.Info("Finalize", "total", total, "balance", balance, "t.Owner", t.Owner, "t.ID", t.ID)
 	}
 	return total
 }
 
-func (dt *DaTong) calcDifficulty(chain consensus.ChainReader, header *types.Header, state *state.StateDB) (*big.Int, common.Hash, *snapshot, error) {
+func (dt *DaTong) calcDifficultyAndTicket(chain consensus.ChainReader, header *types.Header, state *state.StateDB) (*big.Int, common.Hash, *snapshot, error) {
 	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
 	if parent == nil {
 		return nil, common.Hash{}, nil, consensus.ErrUnknownAncestor
@@ -558,7 +558,7 @@ func (dt *DaTong) calcDifficulty(chain consensus.ChainReader, header *types.Head
 // consensus rules that happen at finalization (e.g. block rewards).
 func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
 	uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
-	difficulty, _, snap, err := dt.calcDifficulty(chain, header, state)
+	difficulty, _, snap, err := dt.calcDifficultyAndTicket(chain, header, state)
 	if err != nil {
 		return nil, err
 	}
