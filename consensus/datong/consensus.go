@@ -419,6 +419,10 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		}
 	}
 	log.Info("Finalize", "selectedTime++", selectedTime)
+	if selected == nil {
+		return nil, errors.New("Finalize no ticket selected in maxBlockTime")
+	}
+	updateSelectedTicketTime(header, selected.ID, new(big.Int).SetUint64(htime))
 	snap := newSnapshot()
 
 	if deleteAll {
@@ -545,7 +549,6 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	state.AddBalance(header.Coinbase, common.SystemAssetID, calcRewards(header.Number))
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = types.CalcUncleHash(nil)
-	dt.updateSelectedTicketTime(header, selected.ID, new(big.Int).SetUint64(htime))
 	return types.NewBlock(header, txs, nil, receipts), nil
 }
 
@@ -581,7 +584,7 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results 
 
 	ticketTime := new(big.Int)
 	if header.Number.Cmp(common.Big1) > 0 {
-		ticketTime, err = dt.haveSelectedTicketTime(header)
+		ticketTime, err = haveSelectedTicketTime(header)
 		if err != nil {
 			return err
 		}
@@ -862,7 +865,7 @@ type selectedTicketTime struct {
         sync.Mutex
 }
 
-func (dt *DaTong) updateSelectedTicketTime(header *types.Header, ticketID common.Hash, time *big.Int) {
+func updateSelectedTicketTime(header *types.Header, ticketID common.Hash, time *big.Int) {
 	SelectedTicketTime.Lock()
 	defer SelectedTicketTime.Unlock()
 
@@ -873,7 +876,7 @@ func (dt *DaTong) updateSelectedTicketTime(header *types.Header, ticketID common
 	log.Info("updateSelectedTicketTime", "header.Number", header.Number, "ticketID", ticketID, "time", time)
 }
 
-func (dt *DaTong) haveSelectedTicketTime(header *types.Header) (*big.Int, error) {
+func haveSelectedTicketTime(header *types.Header) (*big.Int, error) {
 	SelectedTicketTime.Lock()
 	defer SelectedTicketTime.Unlock()
 	snap, err := newSnapshotWithData(getSnapDataByHeader(header))
