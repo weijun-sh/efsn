@@ -54,7 +54,6 @@ var (
 	maxBlockTime     uint64 = 120 // 2 minutes
 	ticketWeightStep        = 2   // 2%
 	SelectedTicketTime = &selectedTicketTime{time: make(map[common.Hash]*big.Int)}
-	SealOnce = &sealOnce{}
 )
 
 var (
@@ -376,7 +375,6 @@ func (dt *DaTong) calcDifficultyAndTicket(chain consensus.ChainReader, header *t
 		//log.Error("Miner doesn't have ticket")
 		return nil, common.Hash{}, nil, errors.New("Miner doesn't have ticket")
 	}
-	allTicketsTotalBalance := calcTotalBalance(tickets, state)
 	parentTime := parent.Time.Uint64()
 	htime := parentTime
 	var (
@@ -432,7 +430,11 @@ func (dt *DaTong) calcDifficultyAndTicket(chain consensus.ChainReader, header *t
 	if selected == nil {
 		return nil, common.Hash{}, nil, errors.New("Finalize no ticket selected in maxBlockTime")
 	}
-	updateSelectedTicketTime(header, selected.ID, new(big.Int).SetUint64(htime))
+	erru := updateSelectedTicketTime(header, selected.ID, new(big.Int).SetUint64(htime))
+	if erru != nil {
+		return nil, common.Hash{}, nil, errors.New("Finalize ticket selected used mine")
+	}
+	allTicketsTotalBalance := calcTotalBalance(tickets, state)
 	snap := newSnapshot()
 
 	if deleteAll {
@@ -575,10 +577,6 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	return types.NewBlock(header, txs, nil, receipts), nil
 }
 
-type sealOnce struct {
-        sync.Mutex
-}
-
 // Seal generates a new sealing request for the given input block and pushes
 // the result into the given channel.
 //
@@ -615,7 +613,7 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results 
 	delay := time.Unix(ticketTime.Int64(), 0).Sub(time.Now())
 	log.Info("Seal", "header.Time", header.Time, "time.Now()", time.Now().Unix())
 	if header.Number.Cmp(common.Big1) > 0 && delay < 0 {
-		log.Info("Seal()", "delay", delay)
+		log.Info("Seal()", "delay(<0)", delay)
 		// delay < 0, delay rand( 1 ~ 2000 ms )
 		wiggle := time.Duration(4) * wiggleTime
 		delay = time.Duration(rand.Int63n(int64(wiggle)))
@@ -636,15 +634,10 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results 
 		//	return
 		//}
 
-		SealOnce.Lock()
 		select {
-		case <-stop:
-			SealOnce.Unlock()
-			return
 		case results <- block.WithSeal(header):
 			// One of the threads found a block, abort all others
 			stop = make(chan struct{})
-			SealOnce.Unlock()
 		default:
 			log.Warn("Sealing result is not read by miner", "sealhash", dt.SealHash(header))
 		}
@@ -888,15 +881,19 @@ type selectedTicketTime struct {
         sync.Mutex
 }
 
-func updateSelectedTicketTime(header *types.Header, ticketID common.Hash, time *big.Int) {
+func updateSelectedTicketTime(header *types.Header, ticketID common.Hash, time *big.Int) error {
 	SelectedTicketTime.Lock()
 	defer SelectedTicketTime.Unlock()
 
 	// hash (header.Number + ticketID + header.Coinbase)
 	sum := header.Number.String() + ticketID.String() + header.Coinbase.String()
 	hash := crypto.Keccak256([]byte(sum))
+	if SelectedTicketTime.time[common.BytesToHash(hash)] != nil {
+		return errors.New("ticket for header.Number is used")
+	}
 	SelectedTicketTime.time[common.BytesToHash(hash)] = time
 	log.Info("updateSelectedTicketTime", "header.Number", header.Number, "ticketID", ticketID, "time", time)
+	return nil
 }
 
 func haveSelectedTicketTime(header *types.Header) (*big.Int, error) {
