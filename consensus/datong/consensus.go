@@ -313,6 +313,7 @@ func calcTotalBalance(tickets []*common.Ticket, state *state.StateDB) *big.Int {
 	total := new(big.Int).SetUint64(uint64(0))
 	for _, t := range tickets {
 		balance := state.GetBalance(common.SystemAssetID, t.Owner)
+		balance = new(big.Int).Div(balance, new(big.Int).SetUint64(uint64(1e+18)))
 		total = total.Add(total, balance)
 		log.Info("Finalize", "total", total, "balance", balance, "t.Owner", t.Owner, "t.ID", t.ID)
 	}
