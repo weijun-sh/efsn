@@ -289,7 +289,7 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 		log.Info("consensus.go getAllTickets state not found for parent root ", "err", err.Error())
 		return err
 	}
-	difficulty, selectedTicketID, _, errd := dt.calcDiffculty(chain, header, state)
+	difficulty, selectedTicketID, _, errd := dt.calcDifficulty(chain, header, state)
 	if errd != nil {
 		return errd
 	}
@@ -334,7 +334,7 @@ func calcTotalBalance(tickets []*common.Ticket, state *state.StateDB) *big.Int {
 	return total
 }
 
-func (dt *DaTong) calcDiffculty(chain consensus.ChainReader, header *types.Header, state *state.StateDB) (*big.Int, common.Hash, *snapshot, error) {
+func (dt *DaTong) calcDifficulty(chain consensus.ChainReader, header *types.Header, state *state.StateDB) (*big.Int, common.Hash, *snapshot, error) {
 	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
 	if parent == nil {
 		return nil, common.Hash{}, nil, consensus.ErrUnknownAncestor
@@ -558,7 +558,7 @@ func (dt *DaTong) calcDiffculty(chain consensus.ChainReader, header *types.Heade
 // consensus rules that happen at finalization (e.g. block rewards).
 func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
 	uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
-	difficulty, _, snap, err := dt.calcDiffculty(chain, header, state)
+	difficulty, _, snap, err := dt.calcDifficulty(chain, header, state)
 	if err != nil {
 		return nil, err
 	}
