@@ -284,6 +284,21 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 	//}
 
 	// verify diffculty
+	state, errs := state.New(parent.Root, dt.stateCache)
+	if errs != nil {
+		log.Info("consensus.go getAllTickets state not found for parent root ", "err", err.Error())
+		return err
+	}
+	difficulty, selectedTicketID, _, errd := dt.calcDiffculty(chain, header, state)
+	if errd != nil {
+		return errd
+	}
+	if ticketID != selectedTicketID {
+		return errors.New("verifySeal mismatch selected ticket ID")
+	}
+	if header.Difficulty != difficulty {
+		return errors.New("verifySeal mismatch difficulty")
+	}
 
 
 	return nil
@@ -319,26 +334,21 @@ func calcTotalBalance(tickets []*common.Ticket, state *state.StateDB) *big.Int {
 	return total
 }
 
-// Finalize runs any post-transaction state modifications (e.g. block rewards)
-// and assembles the final block.
-// Note: The block header and state database might be updated to reflect any
-// consensus rules that happen at finalization (e.g. block rewards).
-func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
-	uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
+func (dt *DaTong) calcDiffculty(chain consensus.ChainReader, header *types.Header, state *state.StateDB) (*big.Int, common.Hash, *snapshot, error) {
 	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
 	if parent == nil {
-		return nil, consensus.ErrUnknownAncestor
+		return nil, common.Hash{}, nil, consensus.ErrUnknownAncestor
 	}
 
 	ticketMap, err := state.AllTickets()
 	if err != nil {
 		log.Error("unable to retrieve tickets in Finalize:Consensus.go")
-		return nil, err
+		return nil, common.Hash{}, nil, err
 	}
 
 	if len(ticketMap) == 1 {
 		log.Error("Next block doesn't have ticket, wait buy ticket")
-		return nil, errors.New("Next block doesn't have ticket, wait buy ticket")
+		return nil, common.Hash{}, nil, errors.New("Next block doesn't have ticket, wait buy ticket")
 	}
 
 	//log.Warn("Finalize", "ticketMap", ticketMap)
@@ -364,7 +374,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 
 	if !haveTicket {
 		//log.Error("Miner doesn't have ticket")
-		return nil, errors.New("Miner doesn't have ticket")
+		return nil, common.Hash{}, nil, errors.New("Miner doesn't have ticket")
 	}
 	allTicketsTotalBalance := calcTotalBalance(tickets, state)
 	parentTime := parent.Time.Uint64()
@@ -420,7 +430,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	}
 	log.Info("Finalize", "selectedTime++", selectedTime)
 	if selected == nil {
-		return nil, errors.New("Finalize no ticket selected in maxBlockTime")
+		return nil, common.Hash{}, nil, errors.New("Finalize no ticket selected in maxBlockTime")
 	}
 	updateSelectedTicketTime(header, selected.ID, new(big.Int).SetUint64(htime))
 	snap := newSnapshot()
@@ -525,7 +535,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	}
 
 	if remainingWeight.Cmp(common.Big0) <= 0 {
-		return nil, errors.New("Next block don't have ticket, wait buy ticket")
+		return nil, common.Hash{}, nil, errors.New("Next block don't have ticket, wait buy ticket")
 	}
 
 	// add balance before selected ticket from stored tickets list
@@ -539,7 +549,20 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	ticketsTotalBalance := calcTotalBalance(selectedList, state)
 	log.Info("Finalize", "allTicketsTotalBalance", allTicketsTotalBalance, "ticketsTotalBalance", ticketsTotalBalance, "header.Number", header.Number)
 	ticketsTotal := new(big.Int).Sub(allTicketsTotalBalance, ticketsTotalBalance)
-	header.Difficulty = new(big.Int).Set(ticketsTotal)
+	return new(big.Int).Set(ticketsTotal), selected.ID, snap, nil
+}
+
+// Finalize runs any post-transaction state modifications (e.g. block rewards)
+// and assembles the final block.
+// Note: The block header and state database might be updated to reflect any
+// consensus rules that happen at finalization (e.g. block rewards).
+func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
+	uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
+	difficulty, _, snap, err := dt.calcDiffculty(chain, header, state)
+	if err != nil {
+		return nil, err
+	}
+	header.Difficulty = difficulty
 	log.Info("Finalize", "header.Number", header.Number, "header.Difficulty", header.Difficulty)
 
 	snapBytes := snap.Bytes()
