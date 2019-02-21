@@ -282,21 +282,22 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 	//}
 
 	// verify diffculty
-	state, errs := state.New(parent.Root, dt.stateCache)
-	if errs != nil {
-		log.Info("consensus.go getAllTickets state not found for parent root ", "err", err.Error())
-		return err
-	}
-	difficulty, selectedTicketID, _, errd := dt.calcDifficultyAndTicket(chain, header, state)
-	if errd != nil {
-		return errd
-	}
-	if ticketID != selectedTicketID {
-		return errors.New("verifySeal mismatch selected ticket ID")
-	}
-	if header.Difficulty != difficulty {
-		return errors.New("verifySeal mismatch difficulty")
-	}
+	//state, errs := state.New(parent.Root, dt.stateCache)
+	//if errs != nil {
+	//	log.Info("consensus.go getAllTickets state not found for parent root ", "err", err.Error())
+	//	return err
+	//}
+	//difficulty, selectedTicketID, _, _, errd := dt.calcDifficultyAndTicket(chain, header, state)
+	//if errd != nil {
+	//	return errd
+	//}
+	//if ticketID != selectedTicketID {
+	//	return errors.New("verifySeal mismatch selected ticket ID")
+	//}
+	//if header.Difficulty.Cmp(difficulty) != 0 {
+	//	log.Info("verifySeal", "header.Difficulty", header.Difficulty, "difficulty", difficulty)
+	//	return errors.New("verifySeal mismatch difficulty")
+	//}
 
 
 	return nil
@@ -326,28 +327,29 @@ func calcTotalBalance(tickets []*common.Ticket, state *state.StateDB) *big.Int {
 	total := new(big.Int).SetUint64(uint64(0))
 	for _, t := range tickets {
 		balance := state.GetBalance(common.SystemAssetID, t.Owner)
-		balance.Div(balance, new(big.Int).SetUint64(uint64(1e+18)))
+		log.Info("Finalize", "balance", balance, "t.Owner", t.Owner, "t.ID", t.ID)
+		balance = new(big.Int).Div(balance, new(big.Int).SetUint64(uint64(1e+18)))
 		total = total.Add(total, balance)
 		log.Info("Finalize", "total", total, "balance", balance, "t.Owner", t.Owner, "t.ID", t.ID)
 	}
 	return total
 }
 
-func (dt *DaTong) calcDifficultyAndTicket(chain consensus.ChainReader, header *types.Header, state *state.StateDB) (*big.Int, common.Hash, *snapshot, error) {
+func (dt *DaTong) calcDifficultyAndTicket(chain consensus.ChainReader, header *types.Header, state *state.StateDB) (*big.Int, common.Hash, uint64, *snapshot, error) {
 	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
 	if parent == nil {
-		return nil, common.Hash{}, nil, consensus.ErrUnknownAncestor
+		return nil, common.Hash{}, uint64(0), nil, consensus.ErrUnknownAncestor
 	}
 
 	ticketMap, err := state.AllTickets()
 	if err != nil {
 		log.Error("unable to retrieve tickets in Finalize:Consensus.go")
-		return nil, common.Hash{}, nil, err
+		return nil, common.Hash{}, uint64(0), nil, err
 	}
 
 	if len(ticketMap) == 1 {
 		log.Error("Next block doesn't have ticket, wait buy ticket")
-		return nil, common.Hash{}, nil, errors.New("Next block doesn't have ticket, wait buy ticket")
+		return nil, common.Hash{}, uint64(0), nil, errors.New("Next block doesn't have ticket, wait buy ticket")
 	}
 
 	//log.Warn("Finalize", "ticketMap", ticketMap)
@@ -373,7 +375,7 @@ func (dt *DaTong) calcDifficultyAndTicket(chain consensus.ChainReader, header *t
 
 	if !haveTicket {
 		//log.Error("Miner doesn't have ticket")
-		return nil, common.Hash{}, nil, errors.New("Miner doesn't have ticket")
+		return nil, common.Hash{}, uint64(0), nil, errors.New("Miner doesn't have ticket")
 	}
 	parentTime := parent.Time.Uint64()
 	htime := parentTime
@@ -428,11 +430,7 @@ func (dt *DaTong) calcDifficultyAndTicket(chain consensus.ChainReader, header *t
 	}
 	log.Info("Finalize", "selectedTime++", selectedTime)
 	if selected == nil {
-		return nil, common.Hash{}, nil, errors.New("Finalize no ticket selected in maxBlockTime")
-	}
-	erru := updateSelectedTicketTime(header, selected.ID, new(big.Int).SetUint64(htime))
-	if erru != nil {
-		return nil, common.Hash{}, nil, errors.New("Finalize ticket selected used mine")
+		return nil, common.Hash{}, uint64(0), nil, errors.New("Finalize no ticket selected in maxBlockTime")
 	}
 	allTicketsTotalBalance := calcTotalBalance(tickets, state)
 	snap := newSnapshot()
@@ -537,7 +535,7 @@ func (dt *DaTong) calcDifficultyAndTicket(chain consensus.ChainReader, header *t
 	}
 
 	if remainingWeight.Cmp(common.Big0) <= 0 {
-		return nil, common.Hash{}, nil, errors.New("Next block don't have ticket, wait buy ticket")
+		return nil, common.Hash{}, uint64(0), nil, errors.New("Next block don't have ticket, wait buy ticket")
 	}
 
 	// add balance before selected ticket from stored tickets list
@@ -551,7 +549,7 @@ func (dt *DaTong) calcDifficultyAndTicket(chain consensus.ChainReader, header *t
 	ticketsTotalBalance := calcTotalBalance(selectedList, state)
 	log.Info("Finalize", "allTicketsTotalBalance", allTicketsTotalBalance, "ticketsTotalBalance", ticketsTotalBalance, "header.Number", header.Number)
 	ticketsTotal := new(big.Int).Sub(allTicketsTotalBalance, ticketsTotalBalance)
-	return new(big.Int).Set(ticketsTotal), selected.ID, snap, nil
+	return new(big.Int).Set(ticketsTotal), selected.ID, htime, snap, nil
 }
 
 // Finalize runs any post-transaction state modifications (e.g. block rewards)
@@ -560,9 +558,13 @@ func (dt *DaTong) calcDifficultyAndTicket(chain consensus.ChainReader, header *t
 // consensus rules that happen at finalization (e.g. block rewards).
 func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
 	uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
-	difficulty, _, snap, err := dt.calcDifficultyAndTicket(chain, header, state)
+	difficulty, ticketID, htime, snap, err := dt.calcDifficultyAndTicket(chain, header, state)
 	if err != nil {
 		return nil, err
+	}
+	erru := updateSelectedTicketTime(header, ticketID, new(big.Int).SetUint64(htime))
+	if erru != nil {
+		return nil, errors.New("Finalize ticket selected used")
 	}
 	header.Difficulty = difficulty
 	log.Info("Finalize", "header.Number", header.Number, "header.Difficulty", header.Difficulty)
@@ -607,6 +609,7 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results 
 	if header.Number.Cmp(common.Big1) > 0 {
 		ticketTime, err = haveSelectedTicketTime(header)
 		if err != nil {
+			log.Info("Seal", "header.Time", header.Time, "haveSelectedTicketTime", "error")
 			return err
 		}
 	}
