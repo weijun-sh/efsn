@@ -271,26 +271,26 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 	}
 
 	// verify
-	statedb, errs := state.New(parent.Root, dt.stateCache)
-	if errs != nil {
-		log.Info("consensus.go getAllTickets state not found for parent root ", "err", err.Error())
-		return errs
-	}
-	diff, tid, errv := dt.verifyCalcDifficulty(chain, header, statedb)
-	if errv != nil {
-		log.Info("verifySeal verifyCalcDifficulty", "header.Number", header.Number, "err", errv.Error())
-		return errv
-	}
-	// verify ticket id
-	if tid != ticketID {
-		log.Info("verifySeal ticketID mismatch", "calc-ticketID", tid, "ticketID", ticketID)
-		return errors.New("verifySeal ticketID mismatch")
-	}
-	// verify diffculty
-	if diff.Cmp(header.Difficulty) != 0 {
-		log.Info("verifySeal difficulty mismatch", "calc-diff", diff, "header.Difficulty", header.Difficulty)
-		return errors.New("verifySeal difficulty mismatch")
-	}
+	//statedb, errs := state.New(parent.Root, dt.stateCache)
+	//if errs != nil {
+	//	log.Info("consensus.go getAllTickets state not found for parent root ", "err", err.Error())
+	//	return errs
+	//}
+	//diff, tid, errv := dt.verifyCalcDifficulty(chain, header, statedb)
+	//if errv != nil {
+	//	log.Info("verifySeal verifyCalcDifficulty", "header.Number", header.Number, "err", errv.Error())
+	//	return errv
+	//}
+	//// verify ticket id
+	//if tid != ticketID {
+	//	log.Info("verifySeal ticketID mismatch", "calc-ticketID", tid, "ticketID", ticketID)
+	//	return errors.New("verifySeal ticketID mismatch")
+	//}
+	//// verify diffculty
+	//if diff.Cmp(header.Difficulty) != 0 {
+	//	log.Info("verifySeal difficulty mismatch", "calc-diff", diff, "header.Difficulty", header.Difficulty)
+	//	return errors.New("verifySeal difficulty mismatch")
+	//}
 
 	return nil
 }
@@ -332,6 +332,8 @@ func calcTotalBalance(tickets []*common.Ticket, state *state.StateDB) *big.Int {
 // consensus rules that happen at finalization (e.g. block rewards).
 func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
 	uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
+	_coinbalance := state.GetBalance(common.SystemAssetID, header.Coinbase)
+	log.Info("==== before Finalize", "header.Number", header.Number, "coinbase", header.Coinbase, "coinbase.balance", _coinbalance)
 	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
 	if parent == nil {
 		return nil, consensus.ErrUnknownAncestor
@@ -558,7 +560,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	header.Extra = header.Extra[:extraVanity]
 	header.Extra = append(header.Extra, snapBytes...)
 	header.Extra = append(header.Extra, make([]byte, extraSeal)...)
-	state.AddBalance(header.Coinbase, common.SystemAssetID, calcRewards(header.Number))
+	//state.AddBalance(header.Coinbase, common.SystemAssetID, calcRewards(header.Number))
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	keys := state.GetAccounts()
 	for _, key := range keys {
@@ -987,11 +989,6 @@ func (dt *DaTong) verifyCalcDifficulty(chain consensus.ChainReader, header *type
 	if err != nil {
 		log.Error("unable to retrieve tickets in Finalize:Consensus.go")
 		return nil, common.Hash{}, err
-	}
-
-	if len(ticketMap) == 1 {
-		log.Error("Next block doesn't have ticket, wait buy ticket")
-		return nil, common.Hash{}, errors.New("Next block doesn't have ticket, wait buy ticket")
 	}
 
 	tickets := make([]*common.Ticket, 0)
