@@ -23,6 +23,8 @@ import (
 	"github.com/FusionFoundation/efsn/core/state"
 	"github.com/FusionFoundation/efsn/core/types"
 	"github.com/FusionFoundation/efsn/params"
+	"github.com/FusionFoundation/efsn/log"
+	"github.com/FusionFoundation/efsn/crypto"
 )
 
 // BlockValidator is responsible for validating block headers, uncles and
@@ -95,7 +97,15 @@ func (v *BlockValidator) ValidateState(block, parent *types.Block, statedb *stat
 	}
 	// Validate the state root against the received state root and throw
 	// an error if they don't match.
-	if root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number)); header.Root != root {
+	//if root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number)); header.Root != root {
+	root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number))
+	if header.Root != root {
+		keys := statedb.GetAccounts()
+		for _, key := range keys {
+			v := statedb.GetTrieValueByKey(key[:])
+			log.Debug("===========ValidateState,", "update to trie,key", key.Hex(), "value", crypto.Keccak256Hash(v).Hex(), "", "============")
+		}
+		log.Debug("===========ValidateState,", "new trie root hash", root.Hex(), "", "============")
 		return fmt.Errorf("invalid merkle root (remote: %x local: %x)", header.Root, root)
 	}
 	return nil

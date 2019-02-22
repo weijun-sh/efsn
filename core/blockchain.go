@@ -43,6 +43,7 @@ import (
 	"github.com/FusionFoundation/efsn/params"
 	"github.com/FusionFoundation/efsn/rlp"
 	"github.com/FusionFoundation/efsn/trie"
+	"github.com/davecgh/go-spew/spew"
 	lru "github.com/hashicorp/golang-lru"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
 )
@@ -1166,6 +1167,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		// Validate the state using the default validator
 		datong.SetHeaders(headers[:i])
 		err = bc.Validator().ValidateState(block, parent, state, receipts, usedGas)
+		fmt.Printf("======blockchain.insertChain,run ValidateState finish,block number=%v.================\n", block.NumberU64())
 		datong.SetHeaders(nil)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
@@ -1182,6 +1184,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		case CanonStatTy:
 			log.Debug("Inserted new block", "number", block.Number(), "hash", block.Hash(), "uncles", len(block.Uncles()),
 				"txs", len(block.Transactions()), "gas", block.GasUsed(), "elapsed", common.PrettyDuration(time.Since(bstart)))
+			log.Debug("Inserted new block", "number", block.Number(), "hash", block.Hash(), "uncles", len(block.Uncles()), "block difficulty", block.Difficulty(), "block selected ticket ID", GetBlockTicketID(block).Hex(), "block miner coinbase", block.Coinbase(), "txs", len(block.Transactions()), "gas", block.GasUsed(), "elapsed", common.PrettyDuration(time.Since(bstart)), "block header root hash", block.Root().Hex())
 
 			coalescedLogs = append(coalescedLogs, logs...)
 			blockInsertTimer.UpdateSince(bstart)
@@ -1223,6 +1226,15 @@ type insertStats struct {
 // always print out progress. This avoids the user wondering what's going on.
 const statsReportLimit = 8 * time.Second
 
+func GetBlockTicketID(b *types.Block) common.Hash {
+	ret, err := datong.GetBlockTicketID(b.Header())
+	if err != nil {
+		return common.Hash{}
+	}
+
+	return ret
+}
+
 // report prints statistics if some number of blocks have been processed
 // or more than a few seconds have passed since the last message.
 func (st *insertStats) report(chain []*types.Block, index int, cache common.StorageSize) {
@@ -1245,6 +1257,7 @@ func (st *insertStats) report(chain []*types.Block, index int, cache common.Stor
 			"miner", end.Coinbase(),
 			"parentHash", end.ParentHash(),
 			"time", end.Time(),
+			"ticketID", GetBlockTicketID(end).Hex(),
 		}
 		if st.queued > 0 {
 			context = append(context, []interface{}{"queued", st.queued}...)
@@ -1350,7 +1363,7 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	// Insert the new chain, taking care of the proper incremental order
 	var addedTxs types.Transactions
 	for i := len(newChain) - 1; i >= 0; i-- {
-		log.Warn("reorg, newChain", "number", newChain[i].NumberU64(), "parentHash", newChain[i].ParentHash())
+		log.Warn("reorg, newChain", "number", newChain[i].NumberU64(), "parentHash", newChain[i].ParentHash(), "hash", newChain[i].Hash(), "difficulty", newChain[i].Difficulty())
 		// insert the block in the canonical way, re-writing history
 		bc.insert(newChain[i])
 		// write lookup entries for hash based transaction/receipt searches
@@ -1441,6 +1454,7 @@ func (bc *BlockChain) reportBlock(block *types.Block, receipts types.Receipts, e
 	for _, receipt := range receipts {
 		receiptString += fmt.Sprintf("\t%v\n", receipt)
 	}
+	log.Debug("=====BAD BLOCK=====", "block difficulty", block.Difficulty(), "block selected ticket ID", GetBlockTicketID(block).Hex(), "block miner coinbase", block.Coinbase())
 	log.Error(fmt.Sprintf(`
 ########## BAD BLOCK #########
 Chain config: %v
@@ -1453,6 +1467,7 @@ Miner: 0x%x
 Error: %v
 ##############################
 `, bc.chainConfig, block.Number(), block.Hash(), block.Header().Coinbase, receiptString, err))
+	spew.Printf("reportBlock, block: %#v\n", block)
 }
 
 // InsertHeaderChain attempts to insert the given header chain in to the local

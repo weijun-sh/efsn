@@ -458,3 +458,8 @@ func (api *PrivateDebugAPI) getModifiedAccounts(startBlock, endBlock *types.Bloc
 	}
 	return dirty, nil
 }
+
+// fsn rpc api
+func NewPublicFsnAPI(eth *Ethereum) *PrivateAdminAPI {
+	return &PrivateAdminAPI{eth: eth}
+}

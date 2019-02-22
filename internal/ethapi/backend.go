@@ -135,6 +135,11 @@ func GetAPIs(apiBackend Backend) []rpc.API {
 			Version:   "1.0",
 			Service:   NewPublicFusionAPI(apiBackend),
 			Public:    true,
+		}, {
+			Namespace: "fsn",
+			Version:   "1.0",
+			Service:   NewPublicFsnAPI(apiBackend),
+			Public:    true,
 		},
 	}
 }

@@ -24,7 +24,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	mapset "github.com/deckarep/golang-set"
 	"github.com/FusionFoundation/efsn/common"
 	"github.com/FusionFoundation/efsn/consensus"
 	"github.com/FusionFoundation/efsn/consensus/misc"
@@ -35,6 +34,8 @@ import (
 	"github.com/FusionFoundation/efsn/event"
 	"github.com/FusionFoundation/efsn/log"
 	"github.com/FusionFoundation/efsn/params"
+	"github.com/davecgh/go-spew/spew"
+	mapset "github.com/deckarep/golang-set"
 )
 
 const (
@@ -198,6 +199,7 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, eth Backend,
 		resubmitIntervalCh: make(chan time.Duration),
 		resubmitAdjustCh:   make(chan *intervalAdjust, resubmitAdjustChanSize),
 	}
+	log.Debug("==========worker.newWorker=============")
 	// Subscribe NewTxsEvent for tx pool
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
 	// Subscribe events for blockchain
@@ -223,6 +225,7 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, eth Backend,
 
 // setEtherbase sets the etherbase used to initialize the block coinbase field.
 func (w *worker) setEtherbase(addr common.Address) {
+	log.Debug("==========worker.setEtherbase,", "coinbase", addr.Hex(), "", "=============")
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.coinbase = addr
@@ -230,6 +233,7 @@ func (w *worker) setEtherbase(addr common.Address) {
 
 // setExtra sets the content used to initialize the block extra field.
 func (w *worker) setExtra(extra []byte) {
+	log.Debug("==========worker.setExtra,", "extra", string(extra), "", "=============")
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.extra = extra
@@ -248,6 +252,7 @@ func (w *worker) pending() (*types.Block, *state.StateDB) {
 	if w.snapshotState == nil {
 		return nil, nil
 	}
+	log.Debug("==========worker.pending,", "block pending", w.snapshotBlock, "", "=============")
 	return w.snapshotBlock, w.snapshotState.Copy()
 }
 
@@ -294,6 +299,9 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func(noempty bool, s int32) {
+		if w.chain.CurrentBlock() != nil {
+			log.Debug("=============newWorkLoop,commit func", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
+		}
 		if interrupt != nil {
 			atomic.StoreInt32(interrupt, s)
 		}
@@ -304,6 +312,9 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	}
 	// recalcRecommit recalculates the resubmitting interval upon feedback.
 	recalcRecommit := func(target float64, inc bool) {
+		if w.chain.CurrentBlock() != nil {
+			log.Debug("=============newWorkLoop,recalcRecommit func", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
+		}
 		var (
 			prev = float64(recommit.Nanoseconds())
 			next float64
@@ -321,11 +332,17 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 				next = float64(minRecommit.Nanoseconds())
 			}
 		}
+		log.Debug("==========worker.newWorkLoop,", "next", next, "", "=============")
 		recommit = time.Duration(int64(next))
 	}
 	// clearPending cleans the stale pending tasks.
 	clearPending := func(number uint64) {
 		w.pendingMu.Lock()
+		if w.chain.CurrentBlock() != nil {
+			log.Debug("=============newWorkLoop,clearPending func", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
+		}
+
+		log.Debug("==========worker.newWorkLoop,clear pending state", "current block num", number, "", "=============")
 		for h, t := range w.pendingTasks {
 			if t.block.NumberU64()+staleThreshold <= number {
 				delete(w.pendingTasks, h)
@@ -339,6 +356,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		case <-w.startCh:
 			clearPending(w.chain.CurrentBlock().NumberU64())
 			timestamp = time.Now().Unix()
+			log.Debug("==========worker.newWorkLoop,clear pending state", "timestamp", timestamp, "", "=============")
 			commit(false, commitInterruptNewHead)
 
 		case head := <-w.chainHeadCh:
@@ -350,6 +368,8 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			// If mining is running resubmit a new work cycle periodically to pull in
 			// higher priced transactions. Disable this overhead for pending blocks.
 			if w.isRunning() && (w.config.Clique == nil || w.config.Clique.Period > 0) {
+				log.Debug("=============newWorkLoop,w.isRunning and final execute commit", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
+				log.Debug("==========worker.newWorkLoop,w.isRunning() && (w.config.Clique == nil || w.config.Clique.Period > 0)", "current block num", w.chain.CurrentBlock().NumberU64(), "", "=============")
 				// Short circuit if no new transaction arrives.
 				if atomic.LoadInt32(&w.newTxs) == 0 {
 					timer.Reset(recommit)
@@ -359,6 +379,8 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			}
 
 		case interval := <-w.resubmitIntervalCh:
+			log.Debug("=============newWorkLoop,Miner recommit interval update", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
+			log.Debug("==========worker.newWorkLoop,Miner recommit interval update", "current block num", w.chain.CurrentBlock().NumberU64(), "", "=============")
 			// Adjust resubmit interval explicitly by user.
 			if interval < minRecommitInterval {
 				log.Warn("Sanitizing miner recommit interval", "provided", interval, "updated", minRecommitInterval)
@@ -377,10 +399,14 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 				before := recommit
 				recalcRecommit(float64(recommit.Nanoseconds())/adjust.ratio, true)
 				log.Trace("Increase miner recommit interval", "from", before, "to", recommit)
+				log.Debug("=============newWorkLoop,Increase miner recommit interval", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "from", before, "to", recommit, "", "=========")
+				log.Debug("==========worker.newWorkLoop,Increase miner recommit interval", "from", before, "to", recommit, "block number", w.chain.CurrentBlock().NumberU64(), "=============")
 			} else {
 				before := recommit
 				recalcRecommit(float64(minRecommit.Nanoseconds()), false)
 				log.Trace("Decrease miner recommit interval", "from", before, "to", recommit)
+				log.Debug("=============newWorkLoop,Decrease miner recommit interval", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "from", before, "to", recommit, "", "=========")
+				log.Debug("==========worker.newWorkLoop,Decrease miner recommit interval", "from", before, "to", recommit, "block number", w.chain.CurrentBlock().NumberU64(), "", "=============")
 			}
 
 			if w.resubmitHook != nil {
@@ -388,6 +414,8 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			}
 
 		case <-w.exitCh:
+			log.Debug("=============worker.newWorkLoop,", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
+			log.Debug("==========worker.newWorkLoop,exit=============")
 			return
 		}
 	}
@@ -402,6 +430,8 @@ func (w *worker) mainLoop() {
 	for {
 		select {
 		case req := <-w.newWorkCh:
+			log.Debug("=============worker.mainLoop,do commitNewWork", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
+			log.Debug("==========worker.mainLoop,commit new work", "block number", w.chain.CurrentBlock().NumberU64(), "", "=============")
 			w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
 
 		case ev := <-w.chainSideCh:
@@ -413,6 +443,8 @@ func (w *worker) mainLoop() {
 			// If our mining block contains less than 2 uncle blocks,
 			// add the new uncle block if valid and regenerate a mining block.
 			if w.isRunning() && w.current != nil && w.current.uncles.Cardinality() < 2 {
+				log.Debug("=============worker.mainLoop,final commit uncles", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
+				log.Debug("==========worker.mainLoop,add the new uncle block if valid and regenerate a mining block", "block number", w.chain.CurrentBlock().NumberU64(), "", "=============")
 				start := time.Now()
 				if err := w.commitUncle(w.current, ev.Block.Header()); err == nil {
 					var uncles []*types.Header
@@ -443,6 +475,8 @@ func (w *worker) mainLoop() {
 				coinbase := w.coinbase
 				w.mu.RUnlock()
 
+				log.Debug("=============worker.mainLoop,recevi tx and !isruning", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
+				log.Debug("==========worker.mainLoop,commit new work", "block number", w.chain.CurrentBlock().NumberU64(), "", "=============")
 				txs := make(map[common.Address]types.Transactions)
 				for _, tx := range ev.Txs {
 					acc, _ := types.Sender(w.current.signer, tx)
@@ -454,6 +488,7 @@ func (w *worker) mainLoop() {
 			} else {
 				// If we're mining, but nothing is being processed, wake on new transactions
 				if w.config.Clique != nil && w.config.Clique.Period == 0 {
+					log.Debug("=============worker.mainLoop,recevi tx and isruning and commitNewWork", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
 					w.commitNewWork(nil, false, time.Now().Unix())
 				}
 			}
@@ -490,6 +525,7 @@ func (w *worker) taskLoop() {
 	for {
 		select {
 		case task := <-w.taskCh:
+			log.Debug("=============worker.taskLoop,recive w.taskCh", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
 			if w.newTaskHook != nil {
 				w.newTaskHook(task)
 			}
@@ -508,11 +544,14 @@ func (w *worker) taskLoop() {
 			w.pendingMu.Lock()
 			w.pendingTasks[w.engine.SealHash(task.block.Header())] = task
 			w.pendingMu.Unlock()
+			log.Debug("=============worker.taskLoop,recive w.taskCh and start seal", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "sealHash", sealHash, "task.block", task.block, "", "=========")
 
 			if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
 				log.Warn("Block sealing failed", "err", err)
 			}
+			spew.Printf("after w.engine.Seal, block: %#v\n", task.block)
 		case <-w.exitCh:
+			log.Debug("=============worker.taskLoop,receiv w.exitCh", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
 			interrupt()
 			return
 		}
@@ -525,6 +564,7 @@ func (w *worker) resultLoop() {
 	for {
 		select {
 		case block := <-w.resultCh:
+			log.Debug("=============worker.resultLoop,get w.resultCh", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "get block number", block.NumberU64(), "get block hash", block.Hash(), "", "=========")
 			// Short circuit when receiving empty result.
 			if block == nil {
 				continue
@@ -563,14 +603,17 @@ func (w *worker) resultLoop() {
 				}
 				logs = append(logs, receipt.Logs...)
 			}
+			log.Debug("=============worker.resultLoop,get w.resultCh and write block to db", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "get block number", block.NumberU64(), "get block hash", block.Hash(), "get sealHash", sealhash, "", "=========")
 			// Commit block and state to database.
 			stat, err := w.chain.WriteBlockWithState(block, receipts, task.state)
 			if err != nil {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
 			}
+			spew.Printf("w.chain.WriteBlockWithState, block: %#v\n", block)
 			w.engine.UpdateCurrentCommit(w.current.header, block, true)
 			log.Info("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
+				"difficulty", block.Difficulty(),
 				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
 
 			// Broadcast the block and announce chain insertion event
@@ -590,6 +633,7 @@ func (w *worker) resultLoop() {
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())
 
 		case <-w.exitCh:
+			log.Debug("=============worker.resultLoop,get w.exitCh", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
 			return
 		}
 	}
@@ -675,6 +719,7 @@ func (w *worker) updateSnapshot() {
 }
 
 func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Address) ([]*types.Log, error) {
+	log.Debug("=============worker.commitTransaction,", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "commit tx", tx, "", "=========")
 	snap := w.current.state.Snapshot()
 
 	receipt, _, err := core.ApplyTransaction(w.config, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, vm.Config{})
@@ -689,6 +734,7 @@ func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 }
 
 func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coinbase common.Address, interrupt *int32) bool {
+	log.Debug("=============worker.commitTransactions,", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "commit txs", txs, "", "=========")
 	// Short circuit if current is nil
 	if w.current == nil {
 		return true
@@ -806,6 +852,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
+	log.Debug("=============worker.commitNewWork,", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
 	tstart := time.Now()
 	parent := w.chain.CurrentBlock()
 
@@ -883,6 +930,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	}
 
 	if !noempty {
+		log.Debug("=============worker.commitNewWork,!noempty", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
 		// Create an empty block based on temporary copied state for sealing in advance without waiting block
 		// execution finished.
 		w.commit(uncles, nil, false, tstart)
@@ -896,9 +944,11 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	}
 	// Short circuit if there is no available pending transactions
 	if len(pending) == 0 {
+		log.Debug("=============worker.commitNewWork,len(pending) == 0", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
 		w.updateSnapshot()
 		return
 	}
+	log.Debug("=============worker.commitNewWork,pending is not 0 and start commit", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
 	// Split the pending transactions into locals and remotes
 	localTxs, remoteTxs := make(map[common.Address]types.Transactions), pending
 	for _, account := range w.eth.TxPool().Locals() {
@@ -925,6 +975,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
+	log.Debug("=============worker.commit,and do w.engine.Finalize", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
 	// Deep copy receipts here to avoid interaction between different tasks.
 	receipts := make([]*types.Receipt, len(w.current.receipts))
 	for i, l := range w.current.receipts {
@@ -936,6 +987,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 	if err != nil {
 		return err
 	}
+	spew.Printf("after w.engine.Finalize, block: %#v\n", block)
 	w.engine.UpdateCurrentCommit(w.current.header, block, false)
 	if w.isRunning() {
 		if interval != nil {
@@ -943,6 +995,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 		}
 		select {
 		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now()}:
+			log.Debug("=============worker.commit,isruning and Commit new mining work", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "sealhash", w.engine.SealHash(block.Header()), "", "=========")
 			w.unconfirmed.Shift(block.NumberU64() - 1)
 
 			feesWei := new(big.Int)
@@ -955,10 +1008,12 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 				"uncles", len(uncles), "txs", w.current.tcount, "gas", block.GasUsed(), "fees", feesEth, "elapsed", common.PrettyDuration(time.Since(start)))
 
 		case <-w.exitCh:
+			log.Debug("=============worker.commit,get w.exitCh", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
 			log.Info("Worker has exited")
 		}
 	}
 	if update {
+		log.Debug("=============worker.commit,update snapshot", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
 		w.updateSnapshot()
 	}
 	return nil

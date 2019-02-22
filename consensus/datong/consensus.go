@@ -27,7 +27,7 @@ import (
 
 const (
 	wiggleTime = 500 * time.Millisecond // Random delay (per commit) to allow concurrent commits
-	modifier = uint64(80960000) // 80960000 * e 18
+	modifier   = uint64(80960000)       // 80960000 * e 18
 )
 
 var (
@@ -47,19 +47,19 @@ var (
 type SignerFn func(accounts.Account, []byte) ([]byte, error)
 
 var (
-	maxBytes                = bytes.Repeat([]byte{0xff}, common.HashLength)
-	maxDiff                 = new(big.Int).SetBytes(maxBytes)
-	maxProb                 = new(big.Int)
-	extraVanity             = 32
-	extraSeal               = 65
-	maxBlockTime     uint64 = 120 // 2 minutes
-	ticketWeightStep        = 2   // 2%
-	SelectedTicketTime = &selectedTicketTime{time: make(map[common.Hash]*big.Int)}
+	maxBytes                  = bytes.Repeat([]byte{0xff}, common.HashLength)
+	maxDiff                   = new(big.Int).SetBytes(maxBytes)
+	maxProb                   = new(big.Int)
+	extraVanity               = 32
+	extraSeal                 = 65
+	maxBlockTime       uint64 = 120 // 2 minutes
+	ticketWeightStep          = 2   // 2%
+	SelectedTicketTime        = &selectedTicketTime{time: make(map[common.Hash]*big.Int)}
 )
 
 var (
 	emptyUncleHash = types.CalcUncleHash(nil)
-	CurrentCommit = &currentCommit{Number: new(big.Int).SetUint64(uint64(1)), Size:0, Broaded:false}
+	CurrentCommit  = &currentCommit{Number: new(big.Int).SetUint64(uint64(1)), Size: 0, Broaded: false}
 )
 
 // DaTong wacom
@@ -194,6 +194,8 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 		return errUnknownBlock
 	}
 
+	log.Debug("===========datong.verifySeal", "header number", number)
+	log.Debug("===========datong.verifySeal", "len(parents)", len(parents))
 	var parent *types.Header
 	if len(parents) > 0 {
 		parent = parents[len(parents)-1]
@@ -232,6 +234,7 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 	}
 
 	ticketID := snap.GetVoteTicket()
+	log.Debug("===========datong.verifySeal", "verify ticket ID", ticketID)
 	ticketMap, err := dt.getAllTickets(chain, header, parents)
 
 	if err != nil {
@@ -244,6 +247,7 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 		return errors.New("Ticket not found")
 	}
 	ticket := ticketMap[ticketID]
+	log.Debug("===========datong.verifySeal", "verify ticket owner", ticket.Owner.Hex())
 	// verify ticket with signer
 	if ticket.Owner != signer {
 		log.Info("consensus.verifySeal ticket owner not signer", "ticOwner", ticket.Owner, "signer", signer)
@@ -266,25 +270,25 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 		return errors.New("verifySeal:  no tickets with correct header number, ticket not selected")
 	}
 
-	//selected := false
-	//selectedTickets := dt.selectTickets(tickets, parent, header.Time.Uint64())
-	//selectedTickets := dt.selectTickets(tickets, parent, parent.Time.Uint64())
-	//spew.Printf("VerifySeal, header.Number: %+v, selectedTickets: %#v\n", header.Number, selectedTickets)
-	//for _, v := range selectedTickets {
-	//	if v.ID == ticketID {
-	//		selected = true
-	//		//calc difficult // TODO
-	//		break
-	//	}
-	//}
-
-	//if !selected {
-	//	log.Info("consensus.verifySeal ticket not selected")
-	//	return errors.New("the ticket not selected")
-	//}
-
 	// verify diffculty
-
+	//statedb, errs := state.New(parent.Root, dt.stateCache)
+	//if errs != nil {
+	//	log.Info("consensus.go getAllTickets state not found for parent root ", "err", err.Error())
+	//	return errs
+	//}
+	//diff, tid, errv := verifyCalcDifficulty(chain, header, statedb)
+	//if errv != nil {
+	//	log.Info("verifySeal verifyCalcDifficulty", "header.Number", header.Number, "err", errv.Error())
+	//	return errv
+	//}
+	//if tid != ticketID {
+	//	log.Info("verifySeal ticketID mismatch", "calc-ticketID", tid, "ticketID", ticketID)
+	//	return errors.New("verifySeal ticketID mismatch")
+	//}
+	//if diff != hader.Difficulty {
+	//	log.Info("verifySeal difficulty mismatch", "calc-diff", diff, "header.Difficulty", hader.Difficulty)
+	//	return errors.New("verifySeal difficulty mismatch")
+	//}
 
 	return nil
 }
@@ -315,7 +319,7 @@ func calcTotalBalance(tickets []*common.Ticket, state *state.StateDB) *big.Int {
 		balance := state.GetBalance(common.SystemAssetID, t.Owner)
 		balance = new(big.Int).Div(balance, new(big.Int).SetUint64(uint64(1e+18)))
 		total = total.Add(total, balance)
-		log.Info("Finalize", "total", total, "balance", balance, "t.Owner", t.Owner, "t.ID", t.ID)
+		//log.Info("Finalize", "total", total, "balance", balance, "t.Owner", t.Owner, "t.ID", t.ID)
 	}
 	return total
 }
@@ -371,19 +375,20 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	parentTime := parent.Time.Uint64()
 	htime := parentTime
 	var (
-		selected *common.Ticket
-		retreat  []*common.Ticket
-		selectedList  []*common.Ticket
-		selectedNoSameTicket  []*common.Ticket
+		selected             *common.Ticket
+		retreat              []*common.Ticket
+		selectedList         []*common.Ticket
+		selectedNoSameTicket []*common.Ticket
 	)
+	log.Debug("==============datong.Finalize,", "Header number", header.Number.Uint64(), "", "============")
 	deleteAll := false
 	selectedTime := int64(0)
-	selectedList = make([]*common.Ticket, 0)//TODO
+	selectedList = make([]*common.Ticket, 0) //TODO
 	for {
 		htime++
 		selectedTime++
 		retreat = make([]*common.Ticket, 0)
-		selectedNoSameTicket = make([]*common.Ticket, 0)//TODO
+		selectedNoSameTicket = make([]*common.Ticket, 0) //TODO
 		s := dt.selectTickets(tickets, parent, htime)
 		spew.Printf("Finalize, parent.Number: %+v, htime: %+v, selected ticket: %#v\n", *parent.Number, htime, s)
 		for _, t := range s {
@@ -395,7 +400,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 				retreat = append(retreat, t)
 				i := 0
 				for _, nt := range selectedList {
-					log.Warn("append", "nt.ID", nt.ID, "t.ID", t.ID)
+					//log.Warn("append", "nt.ID", nt.ID, "t.ID", t.ID)
 					if t.ID == nt.ID {
 						i = 1
 						break
@@ -406,7 +411,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 				}
 			}
 		}
-		log.Warn("add", "selectedNoSameTicket", selectedNoSameTicket)
+		//log.Warn("add", "selectedNoSameTicket", selectedNoSameTicket)
 		for _, mt := range selectedNoSameTicket {
 			// store tickets the different
 			selectedList = append(selectedList, mt)
@@ -415,6 +420,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 			break
 		}
 		if (htime - parentTime) > maxBlockTime {
+			log.Debug("==============datong.Finalize,", "select ticket fail,delete all ticket's height < header.Number", "", "============")
 			deleteAll = true
 			break
 		}
@@ -446,7 +452,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 						EndTime:   t.ExpireTime,
 						Value:     t.Value,
 					})
-					state.AddTimeLockBalance( t.Owner, common.SystemAssetID, value)
+					state.AddTimeLockBalance(t.Owner, common.SystemAssetID, value)
 				}
 			}
 		}
@@ -467,6 +473,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		})
 
 		for _, t := range retreat {
+			log.Debug("==============datong.Finalize,", "remove ticket from retreat,ID", t.ID, "", "============")
 			delete(ticketMap, t.ID)
 			state.RemoveTicket(t.ID)
 			if t.Height.Cmp(common.Big0) > 0 {
@@ -505,7 +512,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 					EndTime:   t.ExpireTime,
 					Value:     t.Value,
 				})
-				state.AddTimeLockBalance( t.Owner, common.SystemAssetID, value)
+				state.AddTimeLockBalance(t.Owner, common.SystemAssetID, value)
 			}
 		} else {
 			ticketNumber++
@@ -531,6 +538,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 
 	// add balance before selected ticket from stored tickets list
 
+	log.Info("Finalize snap.Set", "totalBalance", totalBalance, "remainingWeight", remainingWeight, "ticketNumber", ticketNumber)
 	snap.SetWeight(new(big.Int).Add(totalBalance, remainingWeight))
 	snap.SetTicketWeight(remainingWeight)
 	snap.SetTicketNumber(ticketNumber)
@@ -549,7 +557,14 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	header.Extra = append(header.Extra, make([]byte, extraSeal)...)
 	state.AddBalance(header.Coinbase, common.SystemAssetID, calcRewards(header.Number))
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	keys := state.GetAccounts()
+	for _, key := range keys {
+		v := state.GetTrieValueByKey(key[:])
+		log.Debug("===========datong.Finalize,", "update to trie,key", key.Hex(), "value", crypto.Keccak256Hash(v).Hex(), "", "============")
+	}
+	log.Debug("===========datong.Finalize,", "new trie root hash", header.Root.Hex(), "", "============")
 	header.UncleHash = types.CalcUncleHash(nil)
+	spew.Printf("Finalize: header: %#v, txs: %#v, receipts: %#v\n", header, txs, receipts)
 	return types.NewBlock(header, txs, nil, receipts), nil
 }
 
@@ -565,6 +580,7 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results 
 	if number == 0 {
 		return errUnknownBlock
 	}
+	log.Debug("===========datong.Seal", "block number", number, "block hash", block.Hash().Hex(), "block coinbase", block.Coinbase())
 	dt.lock.RLock()
 	signer, signFn := dt.signer, dt.signFn
 	dt.lock.RUnlock()
@@ -606,6 +622,7 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results 
 		case results <- block.WithSeal(header):
 			// One of the threads found a block, abort all others
 			stop = make(chan struct{})
+			//close(stop)
 		default:
 			log.Warn("Sealing result is not read by miner", "sealhash", dt.SealHash(header))
 		}
@@ -627,7 +644,10 @@ func (dt *DaTong) CalcDifficulty(chain consensus.ChainReader, time uint64, paren
 	if err != nil {
 		return nil
 	}
-	return calcDifficulty(snap)
+	//return calcDifficulty(snap)
+	td := calcDifficulty(snap)
+	log.Debug("===========datong.CalcDifficulty", "current header number", parent.Number.Uint64(), "next block td should", td)
+	return td
 }
 
 // ConsensusData wacom
@@ -845,8 +865,8 @@ func GenGenesisExtraData(number *big.Int) []byte {
 
 // store selected-ticket spend time
 type selectedTicketTime struct {
-        time     map[common.Hash]*big.Int
-        sync.Mutex
+	time map[common.Hash]*big.Int
+	sync.Mutex
 }
 
 func updateSelectedTicketTime(header *types.Header, ticketID common.Hash, time *big.Int) {
@@ -883,21 +903,21 @@ func haveSelectedTicketTime(header *types.Header) (*big.Int, error) {
 }
 
 type currentCommit struct {
-        Number      *big.Int       `json:"number"           gencodec:"required"`
-        Hash        [20]common.Hash    `json:"receiptsRoot"     gencodec:"required"`
-	Size        int
-	Broaded     bool//have process: seal and broad
-        sync.Mutex
+	Number  *big.Int        `json:"number"           gencodec:"required"`
+	Hash    [20]common.Hash `json:"receiptsRoot"     gencodec:"required"`
+	Size    int
+	Broaded bool //have process: seal and broad
+	sync.Mutex
 }
 
 func (dt *DaTong) UpdateCurrentCommit(header *types.Header, block *types.Block, fromResult bool) {
-        CurrentCommit.Lock()
-        defer CurrentCommit.Unlock()
-        log.Info("UpdateCurrentCommit", "CurrentCommit.Number(old)", CurrentCommit.Number)
+	CurrentCommit.Lock()
+	defer CurrentCommit.Unlock()
+	log.Info("UpdateCurrentCommit", "CurrentCommit.Number(old)", CurrentCommit.Number)
 	//log.Info("UpdateCurrentCommit", "CurrentCommit.Hash(old)", CurrentCommit.Hash)
 	log.Info("UpdateCurrentCommit", "difficulty", block.Difficulty())
 	if fromResult == true {
-		if block.Coinbase() != dt.signer {//from sync
+		if block.Coinbase() != dt.signer { //from sync
 			return
 		}
 		if dt.isCommit(header, block) == true {
@@ -910,7 +930,7 @@ func (dt *DaTong) UpdateCurrentCommit(header *types.Header, block *types.Block, 
 		CurrentCommit.Broaded = false
 		CurrentCommit.Size = 0
 	}
-        if header.Number.Cmp(CurrentCommit.Number) >= 0 {
+	if header.Number.Cmp(CurrentCommit.Number) >= 0 {
 		if CurrentCommit.Broaded == true {
 			CurrentCommit.Size = 0
 			return
@@ -923,10 +943,10 @@ func (dt *DaTong) UpdateCurrentCommit(header *types.Header, block *types.Block, 
 		if CurrentCommit.Size < 19 {
 			CurrentCommit.Size++
 		}
-        }
+	}
 }
 
-func (dt *DaTong) isCommit(header *types.Header, block *types.Block) bool{
+func (dt *DaTong) isCommit(header *types.Header, block *types.Block) bool {
 	if header.Number.Cmp(CurrentCommit.Number) != 0 {
 		return false
 	}
@@ -939,10 +959,129 @@ func (dt *DaTong) isCommit(header *types.Header, block *types.Block) bool{
 }
 
 func (dt *DaTong) HaveBroaded(header *types.Header, block *types.Block) bool {
-	if block.Coinbase() != dt.signer {//from sync
+	if block.Coinbase() != dt.signer { //from sync
 		return false
 	}
-        CurrentCommit.Lock()
-        defer CurrentCommit.Unlock()
+	CurrentCommit.Lock()
+	defer CurrentCommit.Unlock()
 	return header.Number.Cmp(CurrentCommit.Number) == 0 && CurrentCommit.Broaded
+}
+
+//func verifyCalcDifficulty(chain consensus.ChainReader, header *types.Header, state *state.StateDB) {
+//	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
+//	if parent == nil {
+//		return nil, nil, consensus.ErrUnknownAncestor
+//	}
+//
+//	ticketMap, err := state.AllTickets()
+//	if err != nil {
+//		log.Error("unable to retrieve tickets in Finalize:Consensus.go")
+//		return nil, nil, err
+//	}
+//
+//	if len(ticketMap) == 1 {
+//		log.Error("Next block doesn't have ticket, wait buy ticket")
+//		return nil, nil, errors.New("Next block doesn't have ticket, wait buy ticket")
+//	}
+//
+//	//log.Warn("Finalize", "ticketMap", ticketMap)
+//	tickets := make([]*common.Ticket, 0)
+//	haveTicket := false
+//
+//	var weight, number uint64
+//
+//	for _, v := range ticketMap {
+//		if v.Height.Cmp(header.Number) < 0 {
+//			if v.Owner == header.Coinbase {
+//				number++
+//				weight += header.Number.Uint64() - v.Height.Uint64() + 1
+//				haveTicket = true
+//			}
+//			temp := v
+//			tickets = append(tickets, &temp)
+//		}
+//	}
+//
+//	dt.weight.SetUint64(weight)
+//	dt.validTicketNumber.SetUint64(number)
+//
+//	if !haveTicket {
+//		//log.Error("Miner doesn't have ticket")
+//		return nil, nil, errors.New("Miner doesn't have ticket")
+//	}
+//	allTicketsTotalBalance := calcTotalBalance(tickets, state)
+//	parentTime := parent.Time.Uint64()
+//	htime := parentTime
+//	var (
+//		selected *common.Ticket
+//		retreat  []*common.Ticket
+//		selectedList  []*common.Ticket
+//		selectedNoSameTicket  []*common.Ticket
+//	)
+//	deleteAll := false
+//	selectedTime := int64(0)
+//	selectedList = make([]*common.Ticket, 0)//TODO
+//	for {
+//		htime++
+//		selectedTime++
+//		retreat = make([]*common.Ticket, 0)
+//		selectedNoSameTicket = make([]*common.Ticket, 0)//TODO
+//		s := dt.selectTickets(tickets, parent, htime)
+//		spew.Printf("Finalize, parent.Number: %+v, htime: %+v, selected ticket: %#v\n", *parent.Number, htime, s)
+//		for _, t := range s {
+//			if t.Owner == header.Coinbase {
+//				selected = t
+//				spew.Printf("selected ticket: %#v, coinbase: 0x%x\n", t, header.Coinbase)
+//				break
+//			} else {
+//				retreat = append(retreat, t)
+//				i := 0
+//				for _, nt := range selectedList {
+//					log.Warn("append", "nt.ID", nt.ID, "t.ID", t.ID)
+//					if t.ID == nt.ID {
+//						i = 1
+//						break
+//					}
+//				}
+//				if i == 0 {
+//					selectedNoSameTicket = append(selectedNoSameTicket, t)
+//				}
+//			}
+//		}
+//		log.Warn("add", "selectedNoSameTicket", selectedNoSameTicket)
+//		for _, mt := range selectedNoSameTicket {
+//			// store tickets the different
+//			selectedList = append(selectedList, mt)
+//		}
+//		if selected != nil {
+//			break
+//		}
+//		if (htime - parentTime) > maxBlockTime {
+//			deleteAll = true
+//			break
+//		}
+//	}
+//	log.Info("Finalize", "selectedTime++", selectedTime)
+//	if selected == nil {
+//		return nil, nil, errors.New("Finalize no ticket selected in maxBlockTime")
+//	}
+//
+//	// cacl difficulty
+//	log.Info("Finalize", "selectedList", selectedList, "header.Number", header.Number, "coinbase", header.Coinbase)
+//	ticketsTotalBalance := calcTotalBalance(selectedList, state)
+//	log.Info("Finalize", "allTicketsTotalBalance", allTicketsTotalBalance, "ticketsTotalBalance", ticketsTotalBalance, "header.Number", header.Number)
+//	ticketsTotal := new(big.Int).Sub(allTicketsTotalBalance, ticketsTotalBalance)
+//	return new(big.Int).Set(ticketsTotal), selected.ID, nil
+//}
+
+// printf Info for "BAD BLOCK"
+func GetBlockTicketID(header *types.Header) (common.Hash, error) {
+	snap, err := newSnapshotWithData(getSnapDataByHeader(header))
+	if err != nil {
+		log.Debug("==========GetBlockTicketID,consensus.verifySeal Err newSnapshot ", "err", err.Error())
+		return common.Hash{}, err
+	}
+
+	ticketID := snap.GetVoteTicket()
+	return ticketID, nil
 }

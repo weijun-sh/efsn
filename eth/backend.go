@@ -305,6 +305,11 @@ func (s *Ethereum) APIs() []rpc.API {
 			Version:   "1.0",
 			Service:   s.netRPCService,
 			Public:    true,
+		}, {
+			Namespace: "fsn",
+			Version:   "1.0",
+			Service:   NewPublicFsnAPI(s),
+			Public:    true,
 		},
 	}...)
 }

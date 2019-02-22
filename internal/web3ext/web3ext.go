@@ -427,6 +427,11 @@ web3._extend({
 			params: 2,
 			inputFormatter:[null, null],
 		}),
+		new web3._extend.Method({
+                       name: 'getBlockStateTrie',
+                       call: 'debug_getBlockStateTrie',
+                       params: 1
+		}),
 	],
 	properties: []
 });

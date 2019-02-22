@@ -604,6 +604,11 @@ func (n *Node) apis() []rpc.API {
 			Version:   "1.0",
 			Service:   NewPublicWeb3API(n),
 			Public:    true,
+		}, {
+			Namespace: "fsn",
+			Version:   "1.0",
+			Service:   NewPublicFsnAPI(n),
+			Public:    true,
 		},
 	}
 }

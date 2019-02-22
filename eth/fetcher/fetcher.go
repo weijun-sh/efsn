@@ -24,6 +24,7 @@ import (
 
 	"github.com/FusionFoundation/efsn/common"
 	"github.com/FusionFoundation/efsn/consensus"
+	"github.com/FusionFoundation/efsn/core"
 	"github.com/FusionFoundation/efsn/core/types"
 	"github.com/FusionFoundation/efsn/log"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
@@ -639,7 +640,7 @@ func (f *Fetcher) insert(peer string, block *types.Block) {
 	hash := block.Hash()
 
 	// Run the import on a new thread
-	log.Debug("Importing propagated block", "peer", peer, "number", block.Number(), "hash", hash)
+	log.Debug("Importing propagated block", "peer", peer, "number", block.Number(), "hash", hash, "block selected ticket ID", core.GetBlockTicketID(block).Hex(), "miner coinbase", block.Coinbase(), "block difficulty", block.Difficulty(), "block header root hash", block.Root().Hex())
 	go func() {
 		defer func() { f.done <- hash }()
 

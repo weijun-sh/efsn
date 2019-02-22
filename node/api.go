@@ -75,6 +75,43 @@ func (api *PrivateAdminAPI) RemovePeer(url string) (bool, error) {
 	return true, nil
 }
 
+// PublicFsnAPI is the collection of fsn API methods exposed over
+// both secure and unsecure RPC channels.
+type PublicFsnAPI struct {
+	node *Node // Node interfaced by this API
+}
+
+// NewPublicFsnAPI creates a new API definition for the public fsn methods
+// of the node itself.
+func NewPublicFsnAPI(node *Node) *PublicFsnAPI {
+	return &PublicFsnAPI{node: node}
+}
+
+// Peers retrieves all the information we know about each individual peer at the
+// protocol granularity.
+func (api *PublicFsnAPI) Peers() ([]*p2p.PeerInfo, error) {
+	server := api.node.Server()
+	if server == nil {
+		return nil, ErrNodeStopped
+	}
+	return server.PeersInfo(), nil
+}
+
+// NodeInfo retrieves all the information we know about the host node at the
+// protocol granularity.
+func (api *PublicFsnAPI) NodeInfo() (*p2p.NodeInfo, error) {
+	server := api.node.Server()
+	if server == nil {
+		return nil, ErrNodeStopped
+	}
+	return server.NodeInfo(), nil
+}
+
+// Datadir retrieves the current data directory the node is using.
+func (api *PublicFsnAPI) Datadir() string {
+	return api.node.DataDir()
+}
+
 // AddTrustedPeer allows a remote node to always connect, even if slots are full
 func (api *PrivateAdminAPI) AddTrustedPeer(url string) (bool, error) {
 	// Make sure the server is running, fail otherwise
