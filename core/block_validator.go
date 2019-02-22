@@ -103,9 +103,9 @@ func (v *BlockValidator) ValidateState(block, parent *types.Block, statedb *stat
 		keys := statedb.GetAccounts()
 		for _, key := range keys {
 			v := statedb.GetTrieValueByKey(key[:])
-			log.Debug("===========ValidateState,", "update to trie,key", key.Hex(), "value", crypto.Keccak256Hash(v).Hex(), "", "============")
+			log.Info("===========ValidateState,", "update to trie,key", key.Hex(), "value", crypto.Keccak256Hash(v).Hex(), "", "============")
 		}
-		log.Debug("===========ValidateState,", "new trie root hash", root.Hex(), "", "============")
+		log.Info("===========ValidateState,", "new trie root hash", root.Hex(), "", "============")
 		return fmt.Errorf("invalid merkle root (remote: %x local: %x)", header.Root, root)
 	}
 	return nil
