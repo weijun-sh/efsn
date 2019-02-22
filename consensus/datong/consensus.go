@@ -921,8 +921,15 @@ func (dt *DaTong) UpdateCurrentCommit(header *types.Header, block *types.Block, 
 			return
 		}
 		if dt.isCommit(header, block) == true {
-			CurrentCommit.Broaded = true
-			CurrentCommit.Size = 0
+			if header.Number.Cmp(CurrentCommit.Number) >= 0 {
+				CurrentCommit.Broaded = true
+				number := *header.Number
+				CurrentCommit.Number = new(big.Int).Set(&number)
+				CurrentCommit.Size = 0
+				log.Info("UpdateCurrentCommit broadcast", "header.Number", header.Number)
+			}
+			//CurrentCommit.Broaded = true
+			//CurrentCommit.Size = 0
 		}
 		return
 	}
