@@ -270,25 +270,27 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 		return errors.New("verifySeal:  no tickets with correct header number, ticket not selected")
 	}
 
+	// verify
+	statedb, errs := state.New(parent.Root, dt.stateCache)
+	if errs != nil {
+		log.Info("consensus.go getAllTickets state not found for parent root ", "err", err.Error())
+		return errs
+	}
+	diff, tid, errv := dt.verifyCalcDifficulty(chain, header, statedb)
+	if errv != nil {
+		log.Info("verifySeal verifyCalcDifficulty", "header.Number", header.Number, "err", errv.Error())
+		return errv
+	}
+	// verify ticket id
+	if tid != ticketID {
+		log.Info("verifySeal ticketID mismatch", "calc-ticketID", tid, "ticketID", ticketID)
+		return errors.New("verifySeal ticketID mismatch")
+	}
 	// verify diffculty
-	//statedb, errs := state.New(parent.Root, dt.stateCache)
-	//if errs != nil {
-	//	log.Info("consensus.go getAllTickets state not found for parent root ", "err", err.Error())
-	//	return errs
-	//}
-	//diff, tid, errv := verifyCalcDifficulty(chain, header, statedb)
-	//if errv != nil {
-	//	log.Info("verifySeal verifyCalcDifficulty", "header.Number", header.Number, "err", errv.Error())
-	//	return errv
-	//}
-	//if tid != ticketID {
-	//	log.Info("verifySeal ticketID mismatch", "calc-ticketID", tid, "ticketID", ticketID)
-	//	return errors.New("verifySeal ticketID mismatch")
-	//}
-	//if diff != hader.Difficulty {
-	//	log.Info("verifySeal difficulty mismatch", "calc-diff", diff, "header.Difficulty", hader.Difficulty)
-	//	return errors.New("verifySeal difficulty mismatch")
-	//}
+	if diff.Cmp(header.Difficulty) != 0 {
+		log.Info("verifySeal difficulty mismatch", "calc-diff", diff, "header.Difficulty", header.Difficulty)
+		return errors.New("verifySeal difficulty mismatch")
+	}
 
 	return nil
 }
@@ -975,112 +977,107 @@ func (dt *DaTong) HaveBroaded(header *types.Header, block *types.Block) bool {
 	return header.Number.Cmp(CurrentCommit.Number) == 0 && CurrentCommit.Broaded
 }
 
-//func verifyCalcDifficulty(chain consensus.ChainReader, header *types.Header, state *state.StateDB) {
-//	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
-//	if parent == nil {
-//		return nil, nil, consensus.ErrUnknownAncestor
-//	}
-//
-//	ticketMap, err := state.AllTickets()
-//	if err != nil {
-//		log.Error("unable to retrieve tickets in Finalize:Consensus.go")
-//		return nil, nil, err
-//	}
-//
-//	if len(ticketMap) == 1 {
-//		log.Error("Next block doesn't have ticket, wait buy ticket")
-//		return nil, nil, errors.New("Next block doesn't have ticket, wait buy ticket")
-//	}
-//
-//	//log.Warn("Finalize", "ticketMap", ticketMap)
-//	tickets := make([]*common.Ticket, 0)
-//	haveTicket := false
-//
-//	var weight, number uint64
-//
-//	for _, v := range ticketMap {
-//		if v.Height.Cmp(header.Number) < 0 {
-//			if v.Owner == header.Coinbase {
-//				number++
-//				weight += header.Number.Uint64() - v.Height.Uint64() + 1
-//				haveTicket = true
-//			}
-//			temp := v
-//			tickets = append(tickets, &temp)
-//		}
-//	}
-//
-//	dt.weight.SetUint64(weight)
-//	dt.validTicketNumber.SetUint64(number)
-//
-//	if !haveTicket {
-//		//log.Error("Miner doesn't have ticket")
-//		return nil, nil, errors.New("Miner doesn't have ticket")
-//	}
-//	allTicketsTotalBalance := calcTotalBalance(tickets, state)
-//	parentTime := parent.Time.Uint64()
-//	htime := parentTime
-//	var (
-//		selected *common.Ticket
-//		retreat  []*common.Ticket
-//		selectedList  []*common.Ticket
-//		selectedNoSameTicket  []*common.Ticket
-//	)
-//	deleteAll := false
-//	selectedTime := int64(0)
-//	selectedList = make([]*common.Ticket, 0)//TODO
-//	for {
-//		htime++
-//		selectedTime++
-//		retreat = make([]*common.Ticket, 0)
-//		selectedNoSameTicket = make([]*common.Ticket, 0)//TODO
-//		s := dt.selectTickets(tickets, parent, htime)
-//		spew.Printf("Finalize, parent.Number: %+v, htime: %+v, selected ticket: %#v\n", *parent.Number, htime, s)
-//		for _, t := range s {
-//			if t.Owner == header.Coinbase {
-//				selected = t
-//				spew.Printf("selected ticket: %#v, coinbase: 0x%x\n", t, header.Coinbase)
-//				break
-//			} else {
-//				retreat = append(retreat, t)
-//				i := 0
-//				for _, nt := range selectedList {
-//					log.Warn("append", "nt.ID", nt.ID, "t.ID", t.ID)
-//					if t.ID == nt.ID {
-//						i = 1
-//						break
-//					}
-//				}
-//				if i == 0 {
-//					selectedNoSameTicket = append(selectedNoSameTicket, t)
-//				}
-//			}
-//		}
-//		log.Warn("add", "selectedNoSameTicket", selectedNoSameTicket)
-//		for _, mt := range selectedNoSameTicket {
-//			// store tickets the different
-//			selectedList = append(selectedList, mt)
-//		}
-//		if selected != nil {
-//			break
-//		}
-//		if (htime - parentTime) > maxBlockTime {
-//			deleteAll = true
-//			break
-//		}
-//	}
-//	log.Info("Finalize", "selectedTime++", selectedTime)
-//	if selected == nil {
-//		return nil, nil, errors.New("Finalize no ticket selected in maxBlockTime")
-//	}
-//
-//	// cacl difficulty
-//	log.Info("Finalize", "selectedList", selectedList, "header.Number", header.Number, "coinbase", header.Coinbase)
-//	ticketsTotalBalance := calcTotalBalance(selectedList, state)
-//	log.Info("Finalize", "allTicketsTotalBalance", allTicketsTotalBalance, "ticketsTotalBalance", ticketsTotalBalance, "header.Number", header.Number)
-//	ticketsTotal := new(big.Int).Sub(allTicketsTotalBalance, ticketsTotalBalance)
-//	return new(big.Int).Set(ticketsTotal), selected.ID, nil
-//}
+func (dt *DaTong) verifyCalcDifficulty(chain consensus.ChainReader, header *types.Header, state *state.StateDB) (*big.Int, common.Hash, error) {
+	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
+	if parent == nil {
+		return nil, common.Hash{}, consensus.ErrUnknownAncestor
+	}
+
+	ticketMap, err := state.AllTickets()
+	if err != nil {
+		log.Error("unable to retrieve tickets in Finalize:Consensus.go")
+		return nil, common.Hash{}, err
+	}
+
+	if len(ticketMap) == 1 {
+		log.Error("Next block doesn't have ticket, wait buy ticket")
+		return nil, common.Hash{}, errors.New("Next block doesn't have ticket, wait buy ticket")
+	}
+
+	tickets := make([]*common.Ticket, 0)
+	haveTicket := false
+
+	var weight, number uint64
+
+	for _, v := range ticketMap {
+		if v.Height.Cmp(header.Number) < 0 {
+			if v.Owner == header.Coinbase {
+				number++
+				weight += header.Number.Uint64() - v.Height.Uint64() + 1
+				haveTicket = true
+			}
+			temp := v
+			tickets = append(tickets, &temp)
+		}
+	}
+
+	//dt.weight.SetUint64(weight)
+	//dt.validTicketNumber.SetUint64(number)
+
+	if !haveTicket {
+		return nil, common.Hash{}, errors.New("Miner doesn't have ticket")
+	}
+
+	parentTime := parent.Time.Uint64()
+	htime := parentTime
+	var (
+		selected *common.Ticket
+		selectedList  []*common.Ticket
+		selectedNoSameTicket  []*common.Ticket
+	)
+	selectedTime := int64(0)
+	selectedList = make([]*common.Ticket, 0)//TODO
+	for {
+		htime++
+		selectedTime++
+		selectedNoSameTicket = make([]*common.Ticket, 0)//TODO
+		s := dt.selectTickets(tickets, parent, htime)
+		spew.Printf("Finalize, parent.Number: %+v, htime: %+v, selected ticket: %#v\n", *parent.Number, htime, s)
+		for _, t := range s {
+			if t.Owner == header.Coinbase {
+				selected = t
+				spew.Printf("selected ticket: %#v, coinbase: 0x%x\n", t, header.Coinbase)
+				break
+			} else {
+				ticketIDExist := false
+				for _, nt := range selectedList {
+					log.Warn("append", "nt.ID", nt.ID, "t.ID", t.ID)
+					if t.ID == nt.ID {
+						ticketIDExist = true
+						break
+					}
+				}
+				if ticketIDExist == false {
+					selectedNoSameTicket = append(selectedNoSameTicket, t)
+				}
+			}
+		}
+		log.Warn("add", "selectedNoSameTicket", selectedNoSameTicket)
+		for _, mt := range selectedNoSameTicket {
+			// store tickets the different
+			selectedList = append(selectedList, mt)
+		}
+		if selected != nil {
+			break
+		}
+		if (htime - parentTime) > maxBlockTime {
+			break
+		}
+	}
+	log.Info("verifyCalcDifficulty", "selectedTime++", selectedTime)
+	if selected == nil {
+		return nil, common.Hash{}, errors.New("verifyCalcDifficulty no ticket selected in maxBlockTime")
+	}
+
+	//calc total balance
+	allTicketsTotalBalance := calcTotalBalance(tickets, state)
+	log.Info("verifyCalcDifficulty", "selectedList", selectedList, "header.Number", header.Number, "coinbase", header.Coinbase)
+	ticketsTotalBalance := calcTotalBalance(selectedList, state)
+	log.Info("verifyCalcDifficulty", "allTicketsTotalBalance", allTicketsTotalBalance, "ticketsTotalBalance", ticketsTotalBalance, "header.Number", header.Number)
+	// cacl difficulty
+	ticketsTotal := new(big.Int).Sub(allTicketsTotalBalance, ticketsTotalBalance)
+	return new(big.Int).Set(ticketsTotal), selected.ID, nil
+}
 
 // printf Info for "BAD BLOCK"
 func GetBlockTicketID(header *types.Header) (common.Hash, error) {
