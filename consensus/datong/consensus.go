@@ -549,7 +549,8 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	log.Info("Finalize", "allTicketsTotalBalance", allTicketsTotalBalance, "ticketsTotalBalance", ticketsTotalBalance, "header.Number", header.Number)
 	ticketsTotal := new(big.Int).Sub(allTicketsTotalBalance, ticketsTotalBalance)
 	header.Difficulty = new(big.Int).Set(ticketsTotal)
-	log.Info("Finalize", "header.Number", header.Number, "header.Difficulty", header.Difficulty)
+	coinbalance := state.GetBalance(common.SystemAssetID, header.Coinbase)
+	log.Info("Finalize", "header.Number", header.Number, "header.Difficulty", header.Difficulty, "coinbase", header.Coinbase, "coinbase.balance", coinbalance)
 
 	snapBytes := snap.Bytes()
 	header.Extra = header.Extra[:extraVanity]
