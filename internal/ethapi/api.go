@@ -1498,8 +1498,9 @@ type PublicFsnAPI struct {
 }
 
 // NewPublicFsnAPI creates a new Fsn blockchain API.
-func NewPublicFsnAPI(b Backend) *PublicFsnAPI {
-	return &PublicFsnAPI{b}
+func NewPublicFsnAPI(b Backend) *PublicDebugAPI {
+	//return &PublicFsnAPI{b}
+	return &PublicDebugAPI{b}
 }
 
 func (api *PublicDebugAPI) GetBlockStateTrie(ctx context.Context, root common.Hash) (map[string]interface{}, error) {
