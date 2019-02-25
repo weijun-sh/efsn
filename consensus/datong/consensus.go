@@ -320,7 +320,7 @@ func calcTotalBalance(tickets []*common.Ticket, state *state.StateDB) *big.Int {
 		balance := state.GetBalance(common.SystemAssetID, t.Owner)
 		balance = new(big.Int).Div(balance, new(big.Int).SetUint64(uint64(1e+18)))
 		total = total.Add(total, balance)
-		log.Info("Finalize", "total", total, "balance", balance, "t.Owner", t.Owner, "t.ID", t.ID)
+		//log.Info("Finalize", "total", total, "balance", balance, "t.Owner", t.Owner, "t.ID", t.ID)
 	}
 	return total
 }
@@ -331,8 +331,8 @@ func calcTotalBalance(tickets []*common.Ticket, state *state.StateDB) *big.Int {
 // consensus rules that happen at finalization (e.g. block rewards).
 func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
 	uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
-	coinbalanceS := state.GetBalance(common.SystemAssetID, header.Coinbase)
-	log.Info("Finalize Start", "header.Number", header.Number, "coinbase", header.Coinbase, "coinbase.balance", coinbalanceS)
+	coinbalanceStart := state.GetBalance(common.SystemAssetID, header.Coinbase)
+	log.Info("==================Finalize Start", "header.Number", header.Number, "coinbase", header.Coinbase, "coinbase.balance", coinbalanceStart, "header.time", header.Time, "Now.time", time.Now().Unix())
 
 	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
 	
@@ -373,7 +373,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	dt.validTicketNumber.SetUint64(number)
 
 	if !haveTicket {
-		//log.Error("Miner doesn't have ticket")
+		log.Error("Miner doesn't have ticket")
 		return nil, errors.New("Miner doesn't have ticket")
 	}
 	allTicketsTotalBalance := calcTotalBalance(tickets, state)
@@ -385,7 +385,6 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		selectedList         []*common.Ticket
 		selectedNoSameTicket []*common.Ticket
 	)
-	log.Debug("==============datong.Finalize,", "Header number", header.Number.Uint64(), "", "============")
 	deleteAll := false
 	selectedTime := uint64(0)
 	selectedList = make([]*common.Ticket, 0) //TODO
@@ -430,15 +429,16 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 			break
 		}
 	}
-	log.Info("Finalize time", "htime", htime, "selectedTime++", selectedTime)
+	log.Info("Finalize time", "htime", htime, "selectedRound", htime - parentTime)
 	htime += (selectedTime * uint64(delayTimeModifier))
-	log.Info("Finalize time", "totaldelaytime", htime)
+	log.Info("Finalize time", "(parentTime + ", parentTime, "10 * selectedCountBeforeSelf", selectedTime, ")= totaldelaytime", htime,"totaldelay", htime - parentTime)
 	if selected == nil {
 		// If this, Datong consensus error
 		if selectedTime == uint64(0) {
 			log.Info("Finalize time,", "all tickets not selected in maxBlockTime, header.Number", header.Number)
 		}
 
+		log.Info("Finalize time,", "myself tickets not selected in maxBlockTime, header.Number", header.Number)
 		return nil, errors.New("Finalize time, myself tickets not selected in maxBlockTime")
 	}
 	updateSelectedTicketTime(header, selected.ID, new(big.Int).SetUint64(htime))
@@ -610,8 +610,8 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	log.Info("===========datong.Finalize,", "roothash=", header.Root.Hex(), "", "============")
 	header.UncleHash = types.CalcUncleHash(nil)
 	//spew.Printf("Finalize: header: %#v, txs: %#v, receipts: %#v\n", header, txs, receipts)
-	coinbalance := state.GetBalance(common.SystemAssetID, header.Coinbase)
-	log.Info("Finalize End", "header.Number", header.Number, "header.Difficulty", header.Difficulty, "coinbase", header.Coinbase, "coinbase.balance", coinbalance)
+	coinbalanceEnd := state.GetBalance(common.SystemAssetID, header.Coinbase)
+	log.Info("==================Finalize End", "header.Number", header.Number, "header.Difficulty", header.Difficulty, "coinbase", header.Coinbase, "coinbase.balance", coinbalanceEnd, "header.time", header.Time, "Now.time", time.Now().Unix())
 	return types.NewBlock(header, txs, nil, receipts), nil
 }
 
@@ -650,14 +650,14 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results 
 		}
 	}
 	delay := time.Unix(ticketTime.Int64(), 0).Sub(time.Now())
-	log.Info("Seal", "header.Time", header.Time, "time.Now()", time.Now().Unix())
+	//log.Info("Seal", "header.Time", header.Time, "time.Now()", time.Now().Unix())
 	if header.Number.Cmp(common.Big1) > 0 && delay < 0 {
-		log.Info("Seal()", "delay", delay)
+		log.Info("Seal(),", "delay(<0)", delay)
 		// delay < 0, delay rand( 1 ~ 2000 ms )
 		wiggle := time.Duration(4) * wiggleTime
 		delay = time.Duration(rand.Int63n(int64(wiggle)))
 	}
-	log.Info("Seal()", "delay", delay)
+	log.Info("Seal(),", "delay", delay)
 	go func() {
 		select {
 		case <-stop:

@@ -35,7 +35,7 @@ import (
 	"github.com/FusionFoundation/efsn/log"
 	"github.com/FusionFoundation/efsn/params"
 	"github.com/FusionFoundation/efsn/crypto"
-	"github.com/davecgh/go-spew/spew"
+	// "github.com/davecgh/go-spew/spew"
 	mapset "github.com/deckarep/golang-set"
 )
 
@@ -357,12 +357,13 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		case <-w.startCh:
 			clearPending(w.chain.CurrentBlock().NumberU64())
 			timestamp = time.Now().Unix()
-			log.Debug("==========worker.newWorkLoop,clear pending state", "timestamp", timestamp, "", "=============")
+			log.Info("==========worker.newWorkLoop,clear pending state, startCh", "timestamp", timestamp, "", "=============")
 			commit(false, commitInterruptNewHead)
 
 		case head := <-w.chainHeadCh:
 			clearPending(head.Block.NumberU64())
 			timestamp = time.Now().Unix()
+			log.Info("==========worker.newWorkLoop,clear pending state, chainHeadCh", "timestamp", timestamp, "", "=============")
 			commit(false, commitInterruptNewHead)
 
 		case <-timer.C:
@@ -621,9 +622,9 @@ func (w *worker) resultLoop() {
 			for _, key := range keys {
 				v := task.state.GetTrieValueByKey(key[:])
 				log.Info("===========worker.resultLoop,", "key=", key.Hex(), "value=", crypto.Keccak256Hash(v).Hex(), "", "============")
-				spew.Dump(v)
+				// spew.Dump(v)
 			}
-			log.Info("===========worker.resultLoop,", "roothash=", w.current.header.Root.Hex(), "TicketID=", core.GetBlockTicketID(block).Hex(), "============")
+			log.Info("===========worker.resultLoop,", "roothash=", w.current.header.Root.Hex(), "TicketID=", core.GetBlockTicketID(block).Hex(),"", "============")
 			//spew.Printf("Finalize: header: %#v, txs: %#v, receipts: %#v\n", header, txs, receipts)
 
 			// Broadcast the block and announce chain insertion event
