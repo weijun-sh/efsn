@@ -55,7 +55,6 @@ var (
 	maxBlockTime       uint64 = 120 // 2 minutes
 	ticketWeightStep          = 2   // 2%
 	SelectedTicketTime        = &selectedTicketTime{time: make(map[common.Hash]*big.Int)}
-	StateCache state.Database
 )
 
 var (
@@ -377,6 +376,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		//log.Error("Miner doesn't have ticket")
 		return nil, errors.New("Miner doesn't have ticket")
 	}
+	// calc balance before selected ticket from stored tickets list
 	allTicketsTotalBalance := calcTotalBalance(tickets, parentState)
 	parentTime := parent.Time.Uint64()
 	htime := parentTime
@@ -404,15 +404,15 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 				break
 			} else {
 				retreat = append(retreat, t)
-				i := 0
+				noSameTicket := true
 				for _, nt := range selectedList {
 					//log.Warn("append", "nt.ID", nt.ID, "t.ID", t.ID)
 					if t.ID == nt.ID {
-						i = 1
+						noSameTicket = false
 						break
 					}
 				}
-				if i == 0 {
+				if noSameTicket == true {
 					selectedNoSameTicket = append(selectedNoSameTicket, t)
 				}
 			}
@@ -450,7 +450,6 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	}
 	log.Info("Finalize before deleteAll")
 	if deleteAll {
-		log.Info("Finalize deleteAll if")
 		snap.AddLog(&ticketLog{
 			TicketID: common.BytesToHash(header.Coinbase[:]),
 			Type:     ticketSelect,
@@ -475,7 +474,6 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 			}
 		}
 	} else {
-		log.Info("Finalize before deleteAll if else")
 		delete(ticketMap, selected.ID)
 		statedb.RemoveTicket(selected.ID)
 		if selected.Height.Cmp(common.Big0) > 0 {
@@ -492,7 +490,6 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		})
 
 		for _, t := range retreat {
-			log.Debug("==============datong.Finalize,", "remove ticket from retreat,ID", t.ID, "", "============")
 			delete(ticketMap, t.ID)
 			statedb.RemoveTicket(t.ID)
 			if t.Height.Cmp(common.Big0) > 0 {
@@ -510,16 +507,12 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		}
 	}
 
-	log.Info("Finalize before for")
 	remainingWeight := new(big.Int)
 	totalBalance := new(big.Int)
-	//balanceTemp := make(map[common.Address]bool)
-
 	ticketNumber := 0
 
 	//log.Warn("Finalize AllTickets update", "ticketMap", ticketMap)
 	for _, t := range ticketMap {
-		log.Info("Finalize for")
 		if t.ExpireTime <= htime {
 			delete(ticketMap, t.ID)
 			statedb.RemoveTicket(t.ID)
@@ -541,24 +534,12 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 			weight = weight.Mul(weight, big.NewInt(int64(ticketWeightStep))) // one ticket every block add weight eq number * setp
 			weight = weight.Add(weight, common.Big100)                       // one ticket weight eq 100
 			remainingWeight = remainingWeight.Add(remainingWeight, weight)
-
-			//log.Info("Finalize", "t.Owner", t.Owner)
-			//if _, exist := balanceTemp[t.Owner]; !exist {
-			//	balanceTemp[t.Owner] = true
-			//	balance := state.GetBalance(common.SystemAssetID, t.Owner)
-			//	totalBalance = totalBalance.Add(totalBalance, balance)
-			//	//log.Info("Finalize", "totalBalance", totalBalance, "balance", balance, "t.Owner", t.Owner)
-			//}
-
 		}
 	}
 
-	log.Info("Finalize for end")
 	if remainingWeight.Cmp(common.Big0) <= 0 {
 		return nil, errors.New("Next block don't have ticket, wait buy ticket")
 	}
-
-	// add balance before selected ticket from stored tickets list
 
 	log.Info("Finalize snap.Set", "totalBalance", totalBalance, "remainingWeight", remainingWeight, "ticketNumber", ticketNumber)
 	snap.SetWeight(new(big.Int).Add(totalBalance, remainingWeight))
