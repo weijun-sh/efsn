@@ -1504,15 +1504,20 @@ func NewPublicFsnAPI(b Backend) *PublicDebugAPI {
 }
 
 func (api *PublicDebugAPI) GetBlockStateTrie(ctx context.Context, root common.Hash) (map[string]interface{}, error) {
+	log.Info("===========GetBlockStateTrie, init API============")
+	fmt.Printf("===========GetBlockStateTrie, init API============")
 	res := make(map[string]interface{}, 0)
 	statedb, _, err := api.b.StateAndHeaderByNumber(ctx, rpc.LatestBlockNumber)
 	if statedb == nil || err != nil {
+		log.Info("===========GetBlockStateTrie, init statedb error============")
 		return res, err
 	}
 
 	db := state.NewDatabase(api.b.ChainDb())
 	tr, err := db.OpenTrie(root)
+	log.Info("===========GetBlockStateTrie, OpenTrie============")
 	keys := statedb.GetAccounts()
+	log.Info("===========GetBlockStateTrie, GetAccounts============")
 	for _, key := range keys {
 		v, _ := tr.TryGet(key[:])
 		res[key.Hex()] = crypto.Keccak256Hash(v)

@@ -34,6 +34,7 @@ import (
 	"github.com/FusionFoundation/efsn/event"
 	"github.com/FusionFoundation/efsn/log"
 	"github.com/FusionFoundation/efsn/params"
+	"github.com/FusionFoundation/efsn/crypto"
 	"github.com/davecgh/go-spew/spew"
 	mapset "github.com/deckarep/golang-set"
 )
@@ -549,7 +550,7 @@ func (w *worker) taskLoop() {
 			if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
 				log.Warn("Block sealing failed", "err", err)
 			}
-			spew.Printf("after w.engine.Seal, block: %#v\n", task.block)
+			//spew.Printf("after w.engine.Seal, block: %#v\n", task.block)
 		case <-w.exitCh:
 			log.Debug("=============worker.taskLoop,receiv w.exitCh", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
 			interrupt()
@@ -610,11 +611,20 @@ func (w *worker) resultLoop() {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
 			}
-			spew.Printf("w.chain.WriteBlockWithState, block: %#v\n", block)
+			//spew.Printf("w.chain.WriteBlockWithState, block: %#v\n", block)
 			w.engine.UpdateCurrentCommit(w.current.header, block, true)
 			log.Info("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
-				"difficulty", block.Difficulty(),
+				"difficulty", block.Difficulty(),"ticketID", core.GetBlockTicketID(block).Hex(),
 				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
+
+			keys := task.state.GetAccounts()
+			for _, key := range keys {
+				v := task.state.GetTrieValueByKey(key[:])
+				log.Info("===========worker.resultLoop,", "key=", key.Hex(), "value=", crypto.Keccak256Hash(v).Hex(), "", "============")
+				spew.Dump(v)
+			}
+			log.Info("===========worker.resultLoop,", "roothash=", w.current.header.Root.Hex(), "TicketID=", core.GetBlockTicketID(block).Hex(), "============")
+			//spew.Printf("Finalize: header: %#v, txs: %#v, receipts: %#v\n", header, txs, receipts)
 
 			// Broadcast the block and announce chain insertion event
 			w.mux.Post(core.NewMinedBlockEvent{Block: block})
@@ -987,7 +997,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 	if err != nil {
 		return err
 	}
-	spew.Printf("after w.engine.Finalize, block: %#v\n", block)
+	//spew.Printf("after w.engine.Finalize, block: %#v\n", block)
 	w.engine.UpdateCurrentCommit(w.current.header, block, false)
 	if w.isRunning() {
 		if interval != nil {

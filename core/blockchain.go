@@ -1462,11 +1462,13 @@ Chain config: %v
 Number: %v
 Hash: 0x%x
 Miner: 0x%x
+Difficulty: %v
+TicketID: %v
 %v
 
 Error: %v
 ##############################
-`, bc.chainConfig, block.Number(), block.Hash(), block.Header().Coinbase, receiptString, err))
+`, bc.chainConfig, block.Number(), block.Hash(), block.Header().Coinbase, block.Difficulty(), GetBlockTicketID(block).Hex(), receiptString, err))
 	spew.Printf("reportBlock, block: %#v\n", block)
 }
 

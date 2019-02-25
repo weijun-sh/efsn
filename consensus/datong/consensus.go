@@ -28,6 +28,7 @@ import (
 const (
 	wiggleTime = 500 * time.Millisecond // Random delay (per commit) to allow concurrent commits
 	modifier   = uint64(80960000)       // 80960000 * e 18
+	delayTimeModifier	= 10			// next selected ticket delay time modifier to Seal block
 )
 
 var (
@@ -319,7 +320,7 @@ func calcTotalBalance(tickets []*common.Ticket, state *state.StateDB) *big.Int {
 		balance := state.GetBalance(common.SystemAssetID, t.Owner)
 		balance = new(big.Int).Div(balance, new(big.Int).SetUint64(uint64(1e+18)))
 		total = total.Add(total, balance)
-		//log.Info("Finalize", "total", total, "balance", balance, "t.Owner", t.Owner, "t.ID", t.ID)
+		log.Info("Finalize", "total", total, "balance", balance, "t.Owner", t.Owner, "t.ID", t.ID)
 	}
 	return total
 }
@@ -330,7 +331,11 @@ func calcTotalBalance(tickets []*common.Ticket, state *state.StateDB) *big.Int {
 // consensus rules that happen at finalization (e.g. block rewards).
 func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
 	uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
+	coinbalanceS := state.GetBalance(common.SystemAssetID, header.Coinbase)
+	log.Info("Finalize Start", "header.Number", header.Number, "coinbase", header.Coinbase, "coinbase.balance", coinbalanceS)
+
 	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
+	
 	if parent == nil {
 		return nil, consensus.ErrUnknownAncestor
 	}
@@ -382,11 +387,10 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	)
 	log.Debug("==============datong.Finalize,", "Header number", header.Number.Uint64(), "", "============")
 	deleteAll := false
-	selectedTime := int64(0)
+	selectedTime := uint64(0)
 	selectedList = make([]*common.Ticket, 0) //TODO
 	for {
 		htime++
-		selectedTime++
 		retreat = make([]*common.Ticket, 0)
 		selectedNoSameTicket = make([]*common.Ticket, 0) //TODO
 		s := dt.selectTickets(tickets, parent, htime)
@@ -397,6 +401,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 				spew.Printf("selected ticket: %#v, coinbase: 0x%x\n", t, header.Coinbase)
 				break
 			} else {
+				selectedTime++//ticket queue in selectedList
 				retreat = append(retreat, t)
 				i := 0
 				for _, nt := range selectedList {
@@ -420,14 +425,21 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 			break
 		}
 		if (htime - parentTime) > maxBlockTime {
-			log.Debug("==============datong.Finalize,", "select ticket fail,delete all ticket's height < header.Number", "", "============")
+			// log.Info("Finalize time,", "select ticket fail in maxBlockTime, header.Number", header.Number)
 			deleteAll = true
 			break
 		}
 	}
-	log.Info("Finalize", "selectedTime++", selectedTime)
+	log.Info("Finalize time", "htime", htime, "selectedTime++", selectedTime)
+	htime += (selectedTime * uint64(delayTimeModifier))
+	log.Info("Finalize time", "totaldelaytime", htime)
 	if selected == nil {
-		return nil, errors.New("Finalize no ticket selected in maxBlockTime")
+		// If this, Datong consensus error
+		if selectedTime == uint64(0) {
+			log.Info("Finalize time,", "all tickets not selected in maxBlockTime, header.Number", header.Number)
+		}
+
+		return nil, errors.New("Finalize time, myself tickets not selected in maxBlockTime")
 	}
 	updateSelectedTicketTime(header, selected.ID, new(big.Int).SetUint64(htime))
 	snap := newSnapshot()
@@ -452,7 +464,14 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 						EndTime:   t.ExpireTime,
 						Value:     t.Value,
 					})
-					state.AddTimeLockBalance(t.Owner, common.SystemAssetID, value)
+					coinbalanceA1 := state.GetBalance(common.SystemAssetID, t.Owner)
+					log.Info("Finalize AAAA-1", "header.Number", header.Number,  "t.Owner", t.Owner, "coinbase.balance", coinbalanceA1)
+					log.Info("Finalize AAAA", "SystemAssetIDvalue", value)
+					//state.AddTimeLockBalance(t.Owner, common.SystemAssetID, value)
+
+					coinbalanceA2 := state.GetBalance(common.SystemAssetID, t.Owner)
+					log.Info("Finalize AAAA-2", "header.Number", header.Number,  "t.Owner", t.Owner, "coinbase.balance", coinbalanceA2)
+				
 				}
 			}
 		}
@@ -465,7 +484,15 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 				EndTime:   selected.ExpireTime,
 				Value:     selected.Value,
 			})
-			state.AddTimeLockBalance(selected.Owner, common.SystemAssetID, value)
+			coinbalanceA1 := state.GetBalance(common.SystemAssetID, selected.Owner)
+			log.Info("Finalize BBBB-1", "header.Number", header.Number,  "selected.Owner", selected.Owner, "coinbase.balance", coinbalanceA1)
+			log.Info("Finalize BBBB", "SystemAssetIDvalue", value)
+
+			//state.AddTimeLockBalance(selected.Owner, common.SystemAssetID, value)
+
+			coinbalanceA2 := state.GetBalance(common.SystemAssetID, selected.Owner)
+			log.Info("Finalize BBBB-2", "header.Number", header.Number,  "selected.Owner", selected.Owner, "coinbase.balance", coinbalanceA2)
+
 		}
 		snap.AddLog(&ticketLog{
 			TicketID: selected.ID,
@@ -482,7 +509,15 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 					EndTime:   t.ExpireTime,
 					Value:     t.Value,
 				})
-				state.AddTimeLockBalance(t.Owner, common.SystemAssetID, value)
+				coinbalanceA1 := state.GetBalance(common.SystemAssetID, t.Owner)
+				log.Info("Finalize CCCC-1", "header.Number", header.Number,  "t.Owner", t.Owner, "coinbase.balance", coinbalanceA1)
+				log.Info("Finalize CCCC", "SystemAssetIDvalue", value)
+
+				//state.AddTimeLockBalance(t.Owner, common.SystemAssetID, value)
+
+				coinbalanceA2 := state.GetBalance(common.SystemAssetID, t.Owner)
+				log.Info("Finalize CCCC-2", "header.Number", header.Number,  "t.Owner", t.Owner, "coinbase.balance", coinbalanceA2)
+	
 			}
 			snap.AddLog(&ticketLog{
 				TicketID: t.ID,
@@ -512,7 +547,15 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 					EndTime:   t.ExpireTime,
 					Value:     t.Value,
 				})
-				state.AddTimeLockBalance(t.Owner, common.SystemAssetID, value)
+				coinbalanceA1 := state.GetBalance(common.SystemAssetID, t.Owner)
+				log.Info("Finalize DDDD-1", "header.Number", header.Number,  "t.Owner", t.Owner, "coinbase.balance", coinbalanceA1)
+				log.Info("Finalize DDDD", "SystemAssetIDvalue", value)
+
+				//state.AddTimeLockBalance(t.Owner, common.SystemAssetID, value)
+
+				coinbalanceA2 := state.GetBalance(common.SystemAssetID, t.Owner)
+				log.Info("Finalize DDDD-2", "header.Number", header.Number,  "t.Owner", t.Owner, "coinbase.balance", coinbalanceA2)
+
 			}
 		} else {
 			ticketNumber++
@@ -555,16 +598,20 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	header.Extra = header.Extra[:extraVanity]
 	header.Extra = append(header.Extra, snapBytes...)
 	header.Extra = append(header.Extra, make([]byte, extraSeal)...)
-	state.AddBalance(header.Coinbase, common.SystemAssetID, calcRewards(header.Number))
+	//state.AddBalance(header.Coinbase, common.SystemAssetID, calcRewards(header.Number))
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	keys := state.GetAccounts()
 	for _, key := range keys {
 		v := state.GetTrieValueByKey(key[:])
-		log.Debug("===========datong.Finalize,", "update to trie,key", key.Hex(), "value", crypto.Keccak256Hash(v).Hex(), "", "============")
+		log.Info("===========datong.Finalize,", "key=", key.Hex(), "value=", crypto.Keccak256Hash(v).Hex(), "", "============")
+		//spew.Dump(v)
+		//spew.Printf("value: %#v\n", v)
 	}
-	log.Debug("===========datong.Finalize,", "new trie root hash", header.Root.Hex(), "", "============")
+	log.Info("===========datong.Finalize,", "roothash=", header.Root.Hex(), "", "============")
 	header.UncleHash = types.CalcUncleHash(nil)
-	spew.Printf("Finalize: header: %#v, txs: %#v, receipts: %#v\n", header, txs, receipts)
+	//spew.Printf("Finalize: header: %#v, txs: %#v, receipts: %#v\n", header, txs, receipts)
+	coinbalance := state.GetBalance(common.SystemAssetID, header.Coinbase)
+	log.Info("Finalize End", "header.Number", header.Number, "header.Difficulty", header.Difficulty, "coinbase", header.Coinbase, "coinbase.balance", coinbalance)
 	return types.NewBlock(header, txs, nil, receipts), nil
 }
 
