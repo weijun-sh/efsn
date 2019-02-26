@@ -371,8 +371,8 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		}
 	}
 
-	dt.weight.SetUint64(weight)
-	dt.validTicketNumber.SetUint64(number)
+	//dt.weight.SetUint64(weight)
+	//dt.validTicketNumber.SetUint64(number)
 
 	if !haveTicket {
 		//log.Error("Miner doesn't have ticket")
@@ -461,7 +461,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 
 		for _, t := range ticketMaptest {
 			if t.Height.Cmp(header.Number) < 0 {
-				delete(ticketMaptest, t.ID)
+				delete(ticketMap, t.ID)
 				headerState.RemoveTicket(t.ID)
 				snap.AddLog(&ticketLog{
 					TicketID: t.ID,
@@ -478,7 +478,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 			}
 		}
 	} else {
-		delete(ticketMaptest, selected.ID)
+		delete(ticketMap, selected.ID)
 		headerState.RemoveTicket(selected.ID)
 		if selected.Height.Cmp(common.Big0) > 0 {
 			//value := common.NewTimeLock(&common.TimeLockItem{
@@ -494,7 +494,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		})
 
 		for _, t := range retreat {
-			delete(ticketMaptest, t.ID)
+			delete(ticketMap, t.ID)
 			headerState.RemoveTicket(t.ID)
 			if t.Height.Cmp(common.Big0) > 0 {
 				//value := common.NewTimeLock(&common.TimeLockItem{
@@ -516,9 +516,9 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	ticketNumber := 0
 
 	//log.Warn("Finalize AllTickets update", "ticketMap", ticketMap)
-	for _, t := range ticketMaptest {
+	for _, t := range ticketMaptest {//TODO
 		if t.ExpireTime <= htime {
-			delete(ticketMaptest, t.ID)
+			delete(ticketMap, t.ID)
 			headerState.RemoveTicket(t.ID)
 			snap.AddLog(&ticketLog{
 				TicketID: t.ID,
