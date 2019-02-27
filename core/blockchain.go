@@ -1349,6 +1349,16 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 			return fmt.Errorf("Invalid new chain")
 		}
 	}
+
+	// bugfix: (reorg) chain fork when total difficulty change
+	oldBlock2 := oldChain[len(oldChain)-1:][0]
+	newBlock2 := newChain[len(newChain)-1:][0]
+	log.Info("reorg: newblock difficulty", "Number",newBlock2.NumberU64(), "newBlock", newBlock2.Difficulty(), "oldBlock", oldBlock2.Difficulty())
+	if newBlock2.Difficulty().Cmp(oldBlock2.Difficulty()) < 0 {
+			log.Info("reorg error: newblock difficulty less than oldblock", "Number",newBlock2.NumberU64(), "newBlock", newBlock2.Difficulty(), "oldBlock", oldBlock2.Difficulty())
+			return fmt.Errorf("reorg error: No need to reorg chain")
+	}
+
 	// Ensure the user sees large reorgs
 	if len(oldChain) > 0 && len(newChain) > 0 {
 		logFn := log.Debug
