@@ -1355,8 +1355,8 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	newBlock2 := newChain[len(newChain)-1:][0]
 	log.Info("reorg: newblock difficulty", "Number",newBlock2.NumberU64(), "newBlock", newBlock2.Difficulty(), "oldBlock", oldBlock2.Difficulty())
 	if newBlock2.Difficulty().Cmp(oldBlock2.Difficulty()) < 0 {
-			log.Info("reorg error: newblock difficulty less than oldblock", "Number",newBlock2.NumberU64(), "newBlock", newBlock2.Difficulty(), "oldBlock", oldBlock2.Difficulty())
-			return fmt.Errorf("reorg error: No need to reorg chain")
+			log.Error("reorg error: newblock difficulty less than oldblock", "Number",newBlock2.NumberU64(), "newBlock", newBlock2.Difficulty(), "oldBlock", oldBlock2.Difficulty())
+			return nil
 	}
 
 	// Ensure the user sees large reorgs

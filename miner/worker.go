@@ -301,7 +301,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func(noempty bool, s int32) {
 		if w.chain.CurrentBlock() != nil {
-			log.Debug("=============newWorkLoop,commit func", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
+			log.Info("=============newWorkLoop,commit func", "current Number", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase, "", "=========")
 		}
 		if interrupt != nil {
 			atomic.StoreInt32(interrupt, s)
@@ -377,6 +377,9 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 					timer.Reset(recommit)
 					continue
 				}
+				// Update the miner commit new work timestamp to avoid datong.Seal delay time error 			
+				log.Info("==========worker.newWorkLoop,isRunning and final execute commit, timer.C", "timestamp", timestamp, "", "=============")
+				timestamp = time.Now().Unix()	
 				commit(true, commitInterruptResubmit)
 			}
 

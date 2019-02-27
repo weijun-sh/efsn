@@ -28,11 +28,13 @@ import (
 const (
 	wiggleTime = 500 * time.Millisecond // Random delay (per commit) to allow concurrent commits
 	modifier   = uint64(80960000)       // 80960000 * e 18
-	delayTimeModifier	= 1			// next selected ticket delay time modifier to Seal block
+	delayTimeModifier	= 20			// next selected ticket delay time modifier to Seal block
 )
 
 var (
 	errUnknownBlock = errors.New("unknown block")
+
+	errCoinbase =errors.New("error coinbase")
 
 	errMissingVanity = errors.New("extra-data 32 byte vanity prefix missing")
 
@@ -111,7 +113,12 @@ func (dt *DaTong) verifyHeader(chain consensus.ChainReader, header *types.Header
 		log.Info("consensus.verifyheader eerror unknown block ")
 		return errUnknownBlock
 	}
-
+		// Checkpoint blocks need to enforce zero beneficiary
+		if header.Coinbase == (common.Address{}) {
+			log.Error("verifyHeader", "header.Coinbase", header.Coinbase, "common.Address{}", common.Address{})
+			return errCoinbase
+		}
+	
 	if len(header.Extra) < extraVanity {
 		log.Info("consensus.verifyheadererr missing vanity ")
 		return errMissingVanity
@@ -297,8 +304,13 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 // Prepare initializes the consensus fields of a block header according to the
 // rules of a particular engine. The changes are executed inline.
 func (dt *DaTong) Prepare(chain consensus.ChainReader, header *types.Header) error {
-	log.Info("Prepare", "header.Number", header.Number)
 	header.Coinbase = common.BytesToAddress(dt.signer[:])
+	// Checkpoint blocks need to enforce zero beneficiary
+	if header.Coinbase == (common.Address{}) {
+		log.Error("Prepare", "header.Coinbase", header.Coinbase, "common.Address{}", common.Address{})
+		return errCoinbase
+	}
+	
 	number := header.Number.Uint64()
 	parent := chain.GetHeader(header.ParentHash, number-1)
 	if parent == nil {
@@ -310,6 +322,7 @@ func (dt *DaTong) Prepare(chain consensus.ChainReader, header *types.Header) err
 	header.Extra = header.Extra[:extraVanity]
 	header.Extra = append(header.Extra, make([]byte, extraSeal)...)
 	header.Difficulty = dt.CalcDifficulty(chain, parent.Time.Uint64(), parent)
+	log.Info("========Prepare End", "header.Number", header.Number, "Difficulty", header.Difficulty, "coinbase", header.Coinbase, "header.time", header.Time, "Now.time", time.Now().Unix())
 	return nil
 }
 
@@ -395,7 +408,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		retreat = make([]*common.Ticket, 0)
 		selectedNoSameTicket = make([]*common.Ticket, 0) //TODO
 		s := dt.selectTickets(tickets, parent, htime)
-		spew.Printf("Finalize, parent.Number: %+v, htime: %+v, selected ticket: %#v\n", *parent.Number, htime, s)
+		//spew.Printf("Finalize, parent.Number: %+v, htime: %+v, selected ticket: %#v\n", *parent.Number, htime, s)
 		for _, t := range s {
 			if t.Owner == header.Coinbase {
 				selected = t
@@ -433,7 +446,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	}
 	log.Info("Finalize time", "htime", htime, "selectedRound", htime - parentTime)
 	htime += (selectedTime * uint64(delayTimeModifier))
-	log.Info("Finalize time", "(parentTime + ", parentTime, "10 * selectedCountBeforeSelf", selectedTime, ")= totaldelaytime", htime,"totaldelay", htime - parentTime)
+	log.Info("Finalize time", "(parentTime + ", parentTime, "delayTimeModifier", delayTimeModifier, " * selectedCountBeforeSelf", selectedTime, ")= totaldelaytime", htime,"totaldelay", htime - parentTime)
 	if selected == nil {
 		// If this, Datong consensus error
 		if selectedTime == uint64(0) {
