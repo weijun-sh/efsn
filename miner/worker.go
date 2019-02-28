@@ -379,7 +379,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 				}
 				// Update the miner commit new work timestamp to avoid datong.Seal delay time error 			
 				log.Info("==========worker.newWorkLoop,isRunning and final execute commit, timer.C", "timestamp", timestamp, "", "=============")
-				timestamp = time.Now().Unix()	
+				//timestamp = time.Now().Unix()	
 				commit(true, commitInterruptResubmit)
 			}
 

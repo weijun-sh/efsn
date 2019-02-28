@@ -391,7 +391,8 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		log.Error("Miner doesn't have ticket")
 		return nil, errors.New("Miner doesn't have ticket")
 	}
-	allTicketsTotalBalance := calcTotalBalance(tickets, state)
+	//allTicketsTotalBalance := calcTotalBalance(tickets, state)
+	ticketsTotalAmount := uint64(len(tickets))
 	parentTime := parent.Time.Uint64()
 	htime := parentTime
 	var (
@@ -445,7 +446,9 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		}
 	}
 	log.Info("Finalize time", "htime", htime, "selectedRound", htime - parentTime)
-	htime += (selectedTime * uint64(delayTimeModifier))
+	// htime += (selectedTime * uint64(delayTimeModifier))
+	sealDelayTime := header.Time.Uint64() + (htime - parentTime) + (selectedTime * uint64(delayTimeModifier))
+
 	log.Info("Finalize time", "(parentTime + ", parentTime, "delayTimeModifier", delayTimeModifier, " * selectedCountBeforeSelf", selectedTime, ")= totaldelaytime", htime,"totaldelay", htime - parentTime)
 	if selected == nil {
 		// If this, Datong consensus error
@@ -456,7 +459,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		log.Info("Finalize time,", "myself tickets not selected in maxBlockTime, header.Number", header.Number)
 		return nil, errors.New("Finalize time, myself tickets not selected in maxBlockTime")
 	}
-	updateSelectedTicketTime(header, selected.ID, new(big.Int).SetUint64(htime))
+	updateSelectedTicketTime(header, selected.ID, new(big.Int).SetUint64(sealDelayTime))
 	snap := newSnapshot()
 
 	if deleteAll {
@@ -604,11 +607,12 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 
 	// cacl difficulty
 	log.Info("Finalize", "selectedList", selectedList, "header.Number", header.Number, "coinbase", header.Coinbase)
-	ticketsTotalBalance := calcTotalBalance(selectedList, state)
-	log.Info("Finalize", "allTicketsTotalBalance", allTicketsTotalBalance, "ticketsTotalBalance", ticketsTotalBalance, "header.Number", header.Number)
-	ticketsTotal := new(big.Int).Sub(allTicketsTotalBalance, ticketsTotalBalance)
-	header.Difficulty = new(big.Int).Set(ticketsTotal)
-	log.Info("Finalize", "header.Number", header.Number, "header.Difficulty", header.Difficulty)
+	//ticketsTotalBalance := calcTotalBalance(selectedList, state)
+	//log.Info("Finalize", "allTicketsTotalBalance", allTicketsTotalBalance, "ticketsTotalBalance", ticketsTotalBalance, "header.Number", header.Number)
+	//ticketsTotal := new(big.Int).Sub(allTicketsTotalBalance, ticketsTotalBalance)
+	ticketsTotal := ticketsTotalAmount - selectedTime
+	log.Info("Finalize", "header.Number", header.Number, "header.Difficulty", ticketsTotal, "= ticketsTotalAmount", ticketsTotalAmount, "- ticketsBefore", selectedTime)
+	header.Difficulty = new(big.Int).SetUint64(ticketsTotal)
 
 	snapBytes := snap.Bytes()
 	header.Extra = header.Extra[:extraVanity]
