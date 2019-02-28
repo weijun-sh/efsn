@@ -445,20 +445,37 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 			break
 		}
 	}
+	// If this, Datong consensus error
+	if selected == nil && selectedTime == uint64(0) {
+		log.Info("Finalize time,", "all tickets not selected in maxBlockTime, header.Number", header.Number)
+
+		//spew.Printf("before sortByWeightAndID, tickets: %#v\n", tickets)
+		sortTickets := dt.sortByWeightAndID(tickets, parent, parent.Time.Uint64())
+		//spew.Printf("sortByWeightAndID, sortTickets: %#v\n", sortTickets)
+		for _, t := range sortTickets {
+			if t.Owner == header.Coinbase {
+				selected = t
+				deleteAll = false
+				spew.Printf("selected ticket: %#v, coinbase: 0x%x\n", t, header.Coinbase)
+				break
+			} else {
+				selectedTime++//ticket queue in selectedList
+				retreat = append(retreat, t)
+			}
+
+		}
+		//spew.Printf("sortByWeightAndID, sortTickets: %#v\n", sortTickets)
+		//return nil, errors.New("Finalize time, myself tickets not selected in maxBlockTime")
+	}
+	if selected == nil {
+		return nil, errors.New("myself tickets not selected in maxBlockTime")
+	}
 	log.Info("Finalize time", "htime", htime, "selectedRound", htime - parentTime)
 	// htime += (selectedTime * uint64(delayTimeModifier))
 	sealDelayTime := header.Time.Uint64() + (htime - parentTime) + (selectedTime * uint64(delayTimeModifier))
 
-	log.Info("Finalize time", "(parentTime + ", parentTime, "delayTimeModifier", delayTimeModifier, " * selectedCountBeforeSelf", selectedTime, ")= totaldelaytime", htime,"totaldelay", htime - parentTime)
-	if selected == nil {
-		// If this, Datong consensus error
-		if selectedTime == uint64(0) {
-			log.Info("Finalize time,", "all tickets not selected in maxBlockTime, header.Number", header.Number)
-		}
+	log.Info("Finalize time", "(header.Time ", header.Time.Uint64(), " + delayTimeModifier", delayTimeModifier, " * selectedCountBeforeSelf", selectedTime, ")= totaldelaytime", sealDelayTime, "totaldelay", sealDelayTime - header.Time.Uint64())
 
-		log.Info("Finalize time,", "myself tickets not selected in maxBlockTime, header.Number", header.Number)
-		return nil, errors.New("Finalize time, myself tickets not selected in maxBlockTime")
-	}
 	updateSelectedTicketTime(header, selected.ID, new(big.Int).SetUint64(sealDelayTime))
 	snap := newSnapshot()
 
@@ -606,7 +623,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	snap.SetTicketNumber(ticketNumber)
 
 	// cacl difficulty
-	log.Info("Finalize", "selectedList", selectedList, "header.Number", header.Number, "coinbase", header.Coinbase)
+	//log.Info("Finalize", "selectedList", selectedList, "header.Number", header.Number, "coinbase", header.Coinbase)
 	//ticketsTotalBalance := calcTotalBalance(selectedList, state)
 	//log.Info("Finalize", "allTicketsTotalBalance", allTicketsTotalBalance, "ticketsTotalBalance", ticketsTotalBalance, "header.Number", header.Number)
 	//ticketsTotal := new(big.Int).Sub(allTicketsTotalBalance, ticketsTotalBalance)
@@ -937,6 +954,10 @@ type selectedTicketTime struct {
 }
 
 func updateSelectedTicketTime(header *types.Header, ticketID common.Hash, time *big.Int) {
+	if (header == nil || time == nil || ticketID == common.Hash{}) {
+		log.Warn("updateSelectedTicketTime", "input error", "")
+		return
+	}
 	SelectedTicketTime.Lock()
 	defer SelectedTicketTime.Unlock()
 
@@ -1044,4 +1065,33 @@ func GetBlockTicketID(header *types.Header) (common.Hash, error) {
 
 	ticketID := snap.GetVoteTicket()
 	return ticketID, nil
+}
+
+func (dt *DaTong) sortByWeightAndID(tickets []*common.Ticket, parent *types.Header, time uint64) []*common.Ticket {
+	sort.Sort(ticketSlice{
+		data:         tickets,
+		isSortWeight: false,
+	})
+	selectedTickets := make([]*common.Ticket, 0)
+	
+	expireTime := parent.Time.Uint64()
+	for i := 0; i < len(tickets); i++ {
+		if time >= tickets[i].StartTime && tickets[i].ExpireTime > expireTime {
+	
+			times := new(big.Int).Sub(parent.Number, tickets[i].Height)
+			//times = times.Add(times, common.Big1)
+			times = times.Mul(times, big.NewInt(int64(ticketWeightStep)))
+			times = times.Add(times, common.Big100)
+	
+			//if dt.validateTicket(tickets[i], point, length, times) {
+				tickets[i].SetWeight(times)
+				selectedTickets = append(selectedTickets, tickets[i])
+			//}
+		}
+	}
+	sort.Sort(ticketSlice{
+		data:         selectedTickets,
+		isSortWeight: true,
+	})
+	return selectedTickets
 }
