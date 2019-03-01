@@ -436,6 +436,7 @@ func (w *worker) mainLoop() {
 			w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
 
 		case ev := <-w.chainSideCh:
+			continue//need uncle block rewards
 			if _, exist := w.possibleUncles[ev.Block.Hash()]; exist {
 				continue
 			}
@@ -587,7 +588,7 @@ func (w *worker) resultLoop() {
 			}
 			if w.engine.HaveBroaded(block.Header(), block) {
 				log.Warn("resultLoop", "dt.HaveBroaded", "", "number", block.NumberU64())
-				continue
+				//continue
 			}
 			// Different block could share same sealhash, deep copy here to prevent write-write conflict.
 			var (
