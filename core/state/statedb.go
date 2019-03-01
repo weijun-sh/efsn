@@ -321,6 +321,7 @@ func (self *StateDB) HasSuicided(addr common.Address) bool {
 
 // AddBalance adds amount to the account associated with addr.
 func (self *StateDB) AddBalance(addr common.Address, assetID common.Hash, amount *big.Int) {
+	log.Debug("AddBalance", "addr", addr, "assetID", assetID, "amount", amount)
 	stateObject := self.GetOrNewStateObject(addr)
 	if stateObject != nil {
 		stateObject.AddBalance(assetID, amount)
@@ -385,6 +386,7 @@ func (self *StateDB) SetState(addr common.Address, key, value common.Hash) {
 }
 
 func (self *StateDB) SetData(addr common.Address, value []byte) {
+	log.Debug("SetData", "addr", addr, "value", value)
 
 	stateObject := self.GetOrNewStateObject(addr)
 	if stateObject != nil {
@@ -442,7 +444,7 @@ func (self *StateDB) updateStateObject(stateObject *stateObject) {
 	if err != nil {
 		panic(fmt.Errorf("can't encode object at %x: %v", addr[:], err))
 	}
-	log.Debug("============statedb.go,updateStateObject,", "update to trie,key", addr.Hex(), "value", string(data), "", "===========")
+	log.Debug("updateStateObject", "update to trie, key", addr.Hex(), "value", data)
 	self.setError(self.trie.TryUpdate(addr[:], data))
 }
 
@@ -611,16 +613,16 @@ func (self *StateDB) Copy() *StateDB {
 	}
 
 	if self.assets != nil {
-		state.assets = make(map[common.Hash]common.Asset)
+		state.assets = make(map[common.Hash]common.Asset, len(self.assets))
 		for hash, asset := range self.assets {
-			state.assets[hash] = asset
+			state.assets[hash] = asset.DeepCopy()
 		}
 	}
 
 	if self.tickets != nil {
-		state.tickets = make(map[common.Hash]common.Ticket)
+		state.tickets = make(map[common.Hash]common.Ticket, len(self.tickets))
 		for hash, ticket := range self.tickets {
-			state.tickets[hash] = ticket
+			state.tickets[hash] = ticket.DeepCopy()
 		}
 	}
 

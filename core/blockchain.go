@@ -1159,7 +1159,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		} else {
 			parent = chain[i-1]
 		}
-		state, err := state.New(parent.Root(), bc.stateCache)
+		statedb, err := state.New(parent.Root(), bc.stateCache)
+		state := statedb.Copy()//TODO
 		if err != nil {
 			log.Warn("Err", "state.New", "return")
 			return i, events, coalescedLogs, err
