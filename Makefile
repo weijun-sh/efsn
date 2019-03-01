@@ -17,7 +17,7 @@ efsn:
 	@echo "Run \"$(GOBIN)/efsn\" to launch efsn."
 
 bootnode:
-	build/env.sh go run build/ci.go install ./cmd/efsn
+	build/env.sh go run build/ci.go install ./cmd/bootnode
 
 debug:
 	# https://ethereum.stackexchange.com/questions/41489/how-to-debug-geth-with-delve?rq=1
