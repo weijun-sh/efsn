@@ -22,7 +22,7 @@ import (
 	"github.com/FusionFoundation/efsn/params"
 	"github.com/FusionFoundation/efsn/rlp"
 	"github.com/FusionFoundation/efsn/rpc"
-	"github.com/davecgh/go-spew/spew"
+	//"github.com/davecgh/go-spew/spew"
 )
 
 const (
@@ -271,28 +271,28 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 	}
 
 	// verify
-	statedb, errs := state.New(parent.Root, dt.stateCache)
-	if errs != nil {
-		log.Info("consensus.go getAllTickets state not found for parent root ", "err", err.Error())
-		return errs
-	}
-	diff, tid, errv := dt.verifyCalcDifficulty(chain, header, statedb)
-	if errv != nil {
-		log.Info("verifySeal verifyCalcDifficulty", "header.Number", header.Number, "err", errv.Error())
-		return errv
-	}
-	// verify ticket id
-	log.Info("verifySeal", "calc-ticketID", tid, "ticketID", ticketID)
-	if tid != ticketID {
-		log.Info("verifySeal ticketID mismatch", "calc-ticketID", tid, "ticketID", ticketID)
-		return errors.New("verifySeal ticketID mismatch")
-	}
-	// verify diffculty
-	log.Info("verifySeal", "calc-diff", diff, "header.Difficulty", header.Difficulty)
-	if diff.Cmp(header.Difficulty) != 0 {
-		log.Info("verifySeal difficulty mismatch", "calc-diff", diff, "header.Difficulty", header.Difficulty)
-		return errors.New("verifySeal difficulty mismatch")
-	}
+	//statedb, errs := state.New(parent.Root, dt.stateCache)
+	//if errs != nil {
+	//	log.Info("consensus.go getAllTickets state not found for parent root ", "err", err.Error())
+	//	return errs
+	//}
+	//diff, tid, errv := dt.verifyCalcDifficulty(chain, header, statedb)
+	//if errv != nil {
+	//	log.Info("verifySeal verifyCalcDifficulty", "header.Number", header.Number, "err", errv.Error())
+	//	return errv
+	//}
+	//// verify ticket id
+	//log.Info("verifySeal", "calc-ticketID", tid, "ticketID", ticketID)
+	//if tid != ticketID {
+	//	log.Info("verifySeal ticketID mismatch", "calc-ticketID", tid, "ticketID", ticketID)
+	//	return errors.New("verifySeal ticketID mismatch")
+	//}
+	//// verify diffculty
+	//log.Info("verifySeal", "calc-diff", diff, "header.Difficulty", header.Difficulty)
+	//if diff.Cmp(header.Difficulty) != 0 {
+	//	log.Info("verifySeal difficulty mismatch", "calc-diff", diff, "header.Difficulty", header.Difficulty)
+	//	return errors.New("verifySeal difficulty mismatch")
+	//}
 
 	return nil
 }
@@ -338,6 +338,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	if parent == nil {
 		return nil, consensus.ErrUnknownAncestor
 	}
+	log.Info("Start Finalize", "header.Number", header.Number.Uint64(), "parent.Hash", parent.Hash())
 	parentState, errs := state.New(parent.Root, dt.stateCache)
 	if errs != nil {
 		log.Info("consensus.go getAllTickets state not found for parent root ", "err", errs.Error())
@@ -371,8 +372,8 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		}
 	}
 
-	//dt.weight.SetUint64(weight)
-	//dt.validTicketNumber.SetUint64(number)
+	dt.weight.SetUint64(weight)
+	dt.validTicketNumber.SetUint64(number)
 
 	if !haveTicket {
 		//log.Error("Miner doesn't have ticket")
@@ -398,11 +399,11 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		retreat = make([]*common.Ticket, 0)
 		selectedNoSameTicket = make([]*common.Ticket, 0) //TODO
 		s := dt.selectTickets(tickets, parent, htime)
-		spew.Printf("Finalize, parent.Number: %+v, htime: %+v, selected ticket: %#v\n", *parent.Number, htime, s)
+		//spew.Printf("Finalize, parent.Number: %+v, htime: %+v, selected ticket: %#v\n", *parent.Number, htime, s)
 		for _, t := range s {
 			if t.Owner == header.Coinbase {
 				selected = t
-				spew.Printf("selected ticket: %#v, coinbase: 0x%x\n", t, header.Coinbase)
+				//spew.Printf("selected ticket: %#v, coinbase: 0x%x\n", t, header.Coinbase)
 				break
 			} else {
 				retreat = append(retreat, t)
@@ -452,14 +453,13 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		log.Error("Next block doesn't have ticket, wait buy ticket")
 		return nil, errors.New("Next block doesn't have ticket, wait buy ticket")
 	}
-	log.Info("Finalize before deleteAll")
 	if deleteAll {
 		snap.AddLog(&ticketLog{
 			TicketID: common.BytesToHash(header.Coinbase[:]),
 			Type:     ticketSelect,
 		})
 
-		for _, t := range ticketMaptest {
+		for _, t := range ticketMap {
 			if t.Height.Cmp(header.Number) < 0 {
 				delete(ticketMap, t.ID)
 				headerState.RemoveTicket(t.ID)
@@ -513,10 +513,11 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 
 	remainingWeight := new(big.Int)
 	totalBalance := new(big.Int)
+	balanceTemp := make(map[common.Address]bool)
 	ticketNumber := 0
 
 	//log.Warn("Finalize AllTickets update", "ticketMap", ticketMap)
-	for _, t := range ticketMaptest {//TODO
+	for _, t := range ticketMap {//TODO
 		if t.ExpireTime <= htime {
 			delete(ticketMap, t.ID)
 			headerState.RemoveTicket(t.ID)
@@ -538,6 +539,15 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 			weight = weight.Mul(weight, big.NewInt(int64(ticketWeightStep))) // one ticket every block add weight eq number * setp
 			weight = weight.Add(weight, common.Big100)                       // one ticket weight eq 100
 			remainingWeight = remainingWeight.Add(remainingWeight, weight)
+
+			//log.Info("Finalize", "t.Owner", t.Owner)
+			if _, exist := balanceTemp[t.Owner]; !exist {
+				balanceTemp[t.Owner] = true
+				balance := headerState.GetBalance(common.SystemAssetID, t.Owner)
+				balance = new(big.Int).Div(balance, new(big.Int).SetUint64(uint64(1e+18)))
+				totalBalance = totalBalance.Add(totalBalance, balance)
+				//log.Info("Finalize", "totalBalance", totalBalance, "balance", balance, "t.Owner", t.Owner)
+			}
 		}
 	}
 
@@ -563,11 +573,16 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	header.Extra = header.Extra[:extraVanity]
 	header.Extra = append(header.Extra, snapBytes...)
 	header.Extra = append(header.Extra, make([]byte, extraSeal)...)
+	bb := headerState.GetBalance(common.SystemAssetID, header.Coinbase)
+	log.Info("before Finalize rewards", "header.Number", header.Number, "header.Difficulty", header.Difficulty, "coinbase", header.Coinbase, "coinbase.balance before", bb)
 	headerState.AddBalance(header.Coinbase, common.SystemAssetID, calcRewards(header.Number))
+	ba := headerState.GetBalance(common.SystemAssetID, header.Coinbase)
+	log.Info("after  Finalize rewards", "header.Number", header.Number, "header.Difficulty", header.Difficulty, "coinbase", header.Coinbase, "coinbase.balance after", ba)
 	header.Root = headerState.IntermediateRoot(chain.Config().IsEIP158(header.Number))
-	log.Debug("Finalize", "new trie root hash", header.Root.Hex())
-	header.UncleHash = types.CalcUncleHash(nil)
-	spew.Printf("Finalize: header: %#v, txs: %#v, receipts: %#v\n", header, txs, receipts)
+	log.Info("Finalize", "header.Root", header.Root.Hex(), "header.Number", header.Number)
+	//header.UncleHash = types.CalcUncleHash(nil)
+	//spew.Printf("Finalize: header: %#v, txs: %#v, receipts: %#v\n", header, txs, receipts)
+	log.Info("End Finalize")
 	return types.NewBlock(header, txs, nil, receipts), nil
 }
 
@@ -724,10 +739,7 @@ func (c ticketSlice) Less(i, j int) bool {
 		log.Debug("ticketSlice Less", "c.data[i].ID", c.data[i].ID, "c.data[j].ID", c.data[j].ID)
 		if c.data[i].Weight().Cmp(c.data[j].Weight()) == 0 {
 			log.Debug("ticketSlice Less weight", " = ", "")
-			if c.data[i].ID.String() < c.data[j].ID.String() { //sort by ticketID
-				return true
-			}
-			return false
+			return c.data[i].ID.String() < c.data[j].ID.String() //sort by ticketID
 		}
 		return c.data[i].Weight().Cmp(c.data[j].Weight()) < 0
 	}
@@ -1027,11 +1039,11 @@ func (dt *DaTong) verifyCalcDifficulty(chain consensus.ChainReader, header *type
 		selectedTime++
 		selectedNoSameTicket = make([]*common.Ticket, 0)//TODO
 		s := dt.selectTickets(tickets, parent, htime)
-		spew.Printf("Finalize, parent.Number: %+v, htime: %+v, selected ticket: %#v\n", *parent.Number, htime, s)
+		//spew.Printf("Finalize, parent.Number: %+v, htime: %+v, selected ticket: %#v\n", *parent.Number, htime, s)
 		for _, t := range s {
 			if t.Owner == header.Coinbase {
 				selected = t
-				spew.Printf("selected ticket: %#v, coinbase: 0x%x\n", t, header.Coinbase)
+				//spew.Printf("selected ticket: %#v, coinbase: 0x%x\n", t, header.Coinbase)
 				break
 			} else {
 				ticketIDExist := false

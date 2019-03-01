@@ -43,7 +43,7 @@ import (
 	"github.com/FusionFoundation/efsn/params"
 	"github.com/FusionFoundation/efsn/rlp"
 	"github.com/FusionFoundation/efsn/trie"
-	"github.com/davecgh/go-spew/spew"
+	//"github.com/davecgh/go-spew/spew"
 	lru "github.com/hashicorp/golang-lru"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
 )
@@ -973,6 +973,8 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 	if reorg {
 		// Reorganise the chain if the parent is not the head block
 		if block.ParentHash() != currentBlock.Hash() {
+			log.Info("WriteBlockWithState", "ImportBlock parent totalDifficulty", ptd, "parent.Number", block.NumberU64()-1)
+			log.Info("WriteBlockWithState", "currentBlock totalDifficulty", localTd, "importBlock totalDifficulty", externTd)
 			if err := bc.reorg(currentBlock, block); err != nil {
 				return NonStatTy, err
 			}
@@ -1117,6 +1119,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			externTd := new(big.Int).Add(bc.GetTd(block.ParentHash(), block.NumberU64()-1), block.Difficulty())
 			if localTd.Cmp(externTd) > 0 {
 				if err = bc.WriteBlockWithoutState(block, externTd); err != nil {
+					log.Warn("Err", "bc.WriteBlockWithoutState 223", "return")
 					return i, events, coalescedLogs, err
 				}
 				continue
@@ -1139,11 +1142,13 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			events, coalescedLogs = evs, logs
 
 			if err != nil {
+				log.Warn("Err", "bc.insertChain", "return")
 				return i, events, coalescedLogs, err
 			}
 
 		case err != nil:
 			bc.reportBlock(block, nil, err)
+			log.Warn("Err", "bc.reportBlock 11", "return")
 			return i, events, coalescedLogs, err
 		}
 		// Create a new statedb using the parent block and report an
@@ -1156,21 +1161,24 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		}
 		state, err := state.New(parent.Root(), bc.stateCache)
 		if err != nil {
+			log.Warn("Err", "state.New", "return")
 			return i, events, coalescedLogs, err
 		}
 		// Process block using the parent state as reference point.
 		receipts, logs, usedGas, err := bc.processor.Process(block, state, bc.vmConfig)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
+			log.Warn("Err", "bc.processor.Process", "return")
 			return i, events, coalescedLogs, err
 		}
 		// Validate the state using the default validator
 		datong.SetHeaders(headers[:i])
 		err = bc.Validator().ValidateState(block, parent, state, receipts, usedGas)
-		fmt.Printf("======blockchain.insertChain,run ValidateState finish,block number=%v.================\n", block.NumberU64())
+		//fmt.Printf("======blockchain.insertChain,run ValidateState finish,block number=%v.================\n", block.NumberU64())
 		datong.SetHeaders(nil)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
+			log.Warn("Err", "bc.Validator().ValidateState", "", "err", err)
 			return i, events, coalescedLogs, err
 		}
 		proctime := time.Since(bstart)
@@ -1178,11 +1186,12 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		// Write the block to the chain and get the status.
 		status, err := bc.WriteBlockWithState(block, receipts, state)
 		if err != nil {
+			log.Warn("Err", "bc.WriteBlockWithState", "return")
 			return i, events, coalescedLogs, err
 		}
 		switch status {
 		case CanonStatTy:
-			log.Debug("Inserted new block", "number", block.Number(), "hash", block.Hash(), "uncles", len(block.Uncles()),
+			log.Info("Inserted new block", "number", block.Number(), "hash", block.Hash(), "diff", block.Difficulty(), "block.ParentHash", block.ParentHash(), "coinbase", block.Coinbase(), "uncles", len(block.Uncles()),
 				"txs", len(block.Transactions()), "gas", block.GasUsed(), "elapsed", common.PrettyDuration(time.Since(bstart)))
 			log.Debug("Inserted new block", "number", block.Number(), "hash", block.Hash(), "uncles", len(block.Uncles()), "block difficulty", block.Difficulty(), "block selected ticket ID", GetBlockTicketID(block).Hex(), "block miner coinbase", block.Coinbase(), "txs", len(block.Transactions()), "gas", block.GasUsed(), "elapsed", common.PrettyDuration(time.Since(bstart)), "block header root hash", block.Root().Hex())
 
@@ -1195,7 +1204,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			bc.gcproc += proctime
 
 		case SideStatTy:
-			log.Debug("Inserted forked block", "number", block.Number(), "hash", block.Hash(), "diff", block.Difficulty(), "elapsed",
+			log.Info("Inserted forked block", "number", block.Number(), "hash", block.Hash(), "diff", block.Difficulty(), "block.ParentHash", block.ParentHash(), "coinbase", block.Coinbase(), "elapsed",
 				common.PrettyDuration(time.Since(bstart)), "txs", len(block.Transactions()), "gas", block.GasUsed(), "uncles", len(block.Uncles()))
 
 			blockInsertTimer.UpdateSince(bstart)
@@ -1255,6 +1264,7 @@ func (st *insertStats) report(chain []*types.Block, index int, cache common.Stor
 			"number", end.Number(), "hash", end.Hash(), "cache", cache,
 			"difficulty", end.Difficulty(),
 			"miner", end.Coinbase(),
+			"end.root", end.Root(),
 			"parentHash", end.ParentHash(),
 			"time", end.Time(),
 			"ticketID", GetBlockTicketID(end).Hex(),
@@ -1266,6 +1276,7 @@ func (st *insertStats) report(chain []*types.Block, index int, cache common.Stor
 			context = append(context, []interface{}{"ignored", st.ignored}...)
 		}
 		log.Info("Imported new chain segment", context...)
+		//spew.Printf("Import, block: %#v\n", end)
 
 		*st = insertStats{startTime: now, lastIndex: index + 1}
 	}
@@ -1282,6 +1293,7 @@ func countTransactions(chain []*types.Block) (c int) {
 // to be part of the new canonical chain and accumulates potential missing transactions and post an
 // event about them
 func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
+	log.Info("==== reorg() ====")
 	var (
 		newChain    types.Blocks
 		oldChain    types.Blocks
@@ -1312,6 +1324,7 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	if oldBlock.NumberU64() > newBlock.NumberU64() {
 		// reduce old chain
 		for ; oldBlock != nil && oldBlock.NumberU64() != newBlock.NumberU64(); oldBlock = bc.GetBlock(oldBlock.ParentHash(), oldBlock.NumberU64()-1) {
+			log.Info("reorg", "oldBlock.Number", oldBlock.NumberU64())
 			oldChain = append(oldChain, oldBlock)
 			deletedTxs = append(deletedTxs, oldBlock.Transactions()...)
 
@@ -1320,6 +1333,7 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	} else {
 		// reduce new chain and append new chain blocks for inserting later on
 		for ; newBlock != nil && newBlock.NumberU64() != oldBlock.NumberU64(); newBlock = bc.GetBlock(newBlock.ParentHash(), newBlock.NumberU64()-1) {
+			log.Info("reorg", "newBlock.Number", newBlock.NumberU64())
 			newChain = append(newChain, newBlock)
 		}
 	}
@@ -1349,6 +1363,14 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 			return fmt.Errorf("Invalid new chain")
 		}
 	}
+
+	// bugfix: (reorg) chain fork when total difficulty change
+	oldBlock2 := oldChain[len(oldChain)-1:][0]
+	newBlock2 := newChain[len(newChain)-1:][0]
+	if newBlock2.Difficulty().Cmp(oldBlock2.Difficulty()) < 0 {
+		return fmt.Errorf("reorg: ")
+	}
+
 	// Ensure the user sees large reorgs
 	if len(oldChain) > 0 && len(newChain) > 0 {
 		logFn := log.Debug
@@ -1467,7 +1489,7 @@ Miner: 0x%x
 Error: %v
 ##############################
 `, bc.chainConfig, block.Number(), block.Hash(), block.Header().Coinbase, receiptString, err))
-	spew.Printf("reportBlock, block: %#v\n", block)
+	//spew.Printf("reportBlock, block: %#v\n", block)
 }
 
 // InsertHeaderChain attempts to insert the given header chain in to the local
