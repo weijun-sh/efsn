@@ -321,7 +321,7 @@ func (self *StateDB) HasSuicided(addr common.Address) bool {
 
 // AddBalance adds amount to the account associated with addr.
 func (self *StateDB) AddBalance(addr common.Address, assetID common.Hash, amount *big.Int) {
-	log.Debug("AddBalance", "addr", addr, "assetID", assetID, "amount", amount)
+	log.Info("AddBalance", "addr", addr, "assetID", assetID, "amount", amount)
 	stateObject := self.GetOrNewStateObject(addr)
 	if stateObject != nil {
 		stateObject.AddBalance(assetID, amount)

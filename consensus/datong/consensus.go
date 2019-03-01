@@ -28,7 +28,7 @@ import (
 const (
 	wiggleTime = 500 * time.Millisecond // Random delay (per commit) to allow concurrent commits
 	modifier   = uint64(80960000)       // 80960000 * e 18
-	delayTimeModifier	= 20
+	delayTimeModifier	= 1//20
 )
 
 var (
