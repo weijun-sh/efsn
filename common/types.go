@@ -576,6 +576,19 @@ type Asset struct {
 	CanChange bool
 }
 
+func (u *Asset) DeepCopy() Asset{
+	total := *u.Total
+	return Asset{
+		ID:        u.ID,
+		Owner:     u.Owner,
+		Name:      u.Name,
+		Symbol:    u.Symbol,
+		Decimals:  u.Decimals,
+		Total:     &total,
+		CanChange: u.CanChange,
+	}
+}
+
 func (u *Asset) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
 		ID        Hash
@@ -614,6 +627,25 @@ type Ticket struct {
 	ExpireTime uint64
 	Value      *big.Int `json:",string"`
 	weight     *big.Int `json:",string"`
+}
+
+func (t *Ticket) DeepCopy() Ticket {
+	height := *t.Height
+	value := *t.Value
+	w := t.Weight()
+	wt := new(big.Int)
+	if w != nil {
+		wt = &(*w)
+	}
+	return Ticket {
+		ID:         t.ID,
+		Owner:      t.Owner,
+		Height:     &height,
+		StartTime:  t.StartTime,
+		ExpireTime: t.ExpireTime,
+		Value:      &value,
+		weight:     wt,
+	}
 }
 
 // SetWeight wacom
