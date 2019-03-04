@@ -136,7 +136,7 @@ func (dt *DaTong) verifyHeader(chain consensus.ChainReader, header *types.Header
 	log.Info("verifyHeader", "header.Number", header.Number, "header.Hash", header.Hash, "header.UncleHash", header.UncleHash, "emptyUncleHash", emptyUncleHash)
 	if header.UncleHash != emptyUncleHash {
 		log.Info("consensus.verifyheadererr invalid uncle hash ")
-		return consensus.ErrInvalidUncleHash
+		//return consensus.ErrInvalidUncleHash
 	}
 
 	if header.Time.Cmp(big.NewInt(time.Now().Unix())) > 0 {
@@ -626,7 +626,8 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	log.Info("Finalize", "header.Root", header.Root.Hex(), "header.Number", header.Number)
 	//header.UncleHash = types.CalcUncleHash(nil)
 	//spew.Printf("Finalize: header: %#v, txs: %#v, receipts: %#v\n", header, txs, receipts)
-	return types.NewBlock(header, txs, nil, receipts), nil
+	//return types.NewBlock(header, txs, nil, receipts), nil
+	return types.NewBlock(header, txs, uncles, receipts), nil
 }
 
 // AccumulateRewards credits the coinbase of the given block with the mining
