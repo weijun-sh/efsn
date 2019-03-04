@@ -28,11 +28,13 @@ import (
 const (
 	wiggleTime = 500 * time.Millisecond // Random delay (per commit) to allow concurrent commits
 	modifier   = uint64(80960000)       // 80960000 * e 18
-	delayTimeModifier	= 1//20
+	delayTimeModifier	= 20
 )
 
 var (
 	errUnknownBlock = errors.New("unknown block")
+
+	errCoinbase = errors.New("error coinbase")
 
 	errMissingVanity = errors.New("extra-data 32 byte vanity prefix missing")
 
@@ -111,6 +113,11 @@ func (dt *DaTong) verifyHeader(chain consensus.ChainReader, header *types.Header
 		log.Info("consensus.verifyheader eerror unknown block ")
 		return errUnknownBlock
 	}
+	// Checkpoint blocks need to enforce zero beneficiary
+	if header.Coinbase == (common.Address{}) {
+		log.Error("verifyHeader", "header.Coinbase", header.Coinbase, "common.Address{}", common.Address{})
+		return errCoinbase
+	}
 
 	if len(header.Extra) < extraVanity {
 		log.Info("consensus.verifyheadererr missing vanity ")
@@ -126,9 +133,10 @@ func (dt *DaTong) verifyHeader(chain consensus.ChainReader, header *types.Header
 		return err
 	}
 
+	log.Info("verifyHeader", "header.Number", header.Number, "header.Hash", header.Hash, "header.UncleHash", header.UncleHash, "emptyUncleHash", emptyUncleHash)
 	if header.UncleHash != emptyUncleHash {
 		log.Info("consensus.verifyheadererr invalid uncle hash ")
-		return errInvalidUncleHash
+		return consensus.ErrInvalidUncleHash
 	}
 
 	if header.Time.Cmp(big.NewInt(time.Now().Unix())) > 0 {
@@ -170,7 +178,7 @@ func (dt *DaTong) VerifyHeaders(chain consensus.ChainReader, headers []*types.He
 // rules of the stock Ethereum ethash engine.
 func (dt *DaTong) VerifyUncles(chain consensus.ChainReader, block *types.Block) error {
 	if len(block.Uncles()) > 0 {
-		return errors.New("uncles not allowed")
+		//return errors.New("uncles not allowed")
 	}
 	return nil
 }
@@ -302,6 +310,10 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 // rules of a particular engine. The changes are executed inline.
 func (dt *DaTong) Prepare(chain consensus.ChainReader, header *types.Header) error {
 	//header.Coinbase = common.BytesToAddress(dt.signer[:])
+	if header.Coinbase == (common.Address{}) {
+		log.Error("Prepare", "header.Coinbase", header.Coinbase, "common.Address{}", common.Address{})
+		return errCoinbase
+	}
 	log.Info("Prepare", "header.Number", header.Number, "coinbase", header.Coinbase)
 	number := header.Number.Uint64()
 	parent := chain.GetHeader(header.ParentHash, number-1)
@@ -339,7 +351,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	if parent == nil {
 		return nil, consensus.ErrUnknownAncestor
 	}
-	log.Info("Start Finalize", "header.Number", header.Number.Uint64(), "parent.Hash", parent.Hash())
+	log.Info("Start Finalize", "header.Number", header.Number.Uint64(), "parent.Hash", parent.Hash(), "uncles", uncles)
 	parentState, errs := state.New(parent.Root, dt.stateCache)
 	if errs != nil {
 		log.Info("consensus.go getAllTickets state not found for parent root ", "err", errs.Error())
@@ -347,8 +359,6 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	}
 	tmpState := *statedb
 	headerState := &tmpState
-	_coinbalance := headerState.GetBalance(common.SystemAssetID, header.Coinbase)
-	log.Info("SSS before Finalize", "header.Number", header.Number, "coinbase", header.Coinbase, "coinbase.balance SSSSSSSSSSSSSSSSSSSSSSSS", _coinbalance)
 
 	ticketMaptest, err := parentState.AllTickets()
 	if err != nil {
@@ -604,17 +614,43 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	header.Extra = header.Extra[:extraVanity]
 	header.Extra = append(header.Extra, snapBytes...)
 	header.Extra = append(header.Extra, make([]byte, extraSeal)...)
+
 	bb := headerState.GetBalance(common.SystemAssetID, header.Coinbase)
 	log.Info("before Finalize rewards", "header.Number", header.Number, "header.Difficulty", header.Difficulty, "coinbase", header.Coinbase, "coinbase.balance BBBBefore", bb)
 	headerState.AddBalance(header.Coinbase, common.SystemAssetID, calcRewards(header.Number))
+	//dt.accumulateRewards(chain.Config(), headerState, header, uncles)
 	ba := headerState.GetBalance(common.SystemAssetID, header.Coinbase)
 	log.Info("after  Finalize rewards", "header.Number", header.Number, "header.Difficulty", header.Difficulty, "coinbase", header.Coinbase, "coinbase.balance AAAAAfter", ba)
+
 	header.Root = headerState.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	log.Info("Finalize", "header.Root", header.Root.Hex(), "header.Number", header.Number)
 	//header.UncleHash = types.CalcUncleHash(nil)
 	//spew.Printf("Finalize: header: %#v, txs: %#v, receipts: %#v\n", header, txs, receipts)
-	log.Info("End Finalize")
 	return types.NewBlock(header, txs, nil, receipts), nil
+}
+
+// AccumulateRewards credits the coinbase of the given block with the mining
+// reward. The total reward consists of the static block reward and rewards for
+// included uncles. The coinbase of each uncle block is also rewarded.
+func (dt *DaTong)accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) {
+	// Accumulate the rewards for the miner and any included uncles
+	reward := calcRewards(header.Number)
+	if header.Coinbase != dt.signer {
+		r := calcRewards(header.Number)
+		for _, uncle := range uncles {
+			log.Warn("accumulateRewards", "uncle", uncle)
+			r.Add(uncle.Number, big8)
+			r.Sub(r, header.Number)
+			r.Mul(r, blockReward)
+			r.Div(r, big8)
+			state.AddBalance(uncle.Coinbase, common.SystemAssetID, r)
+
+			r.Div(blockReward, big32)
+			reward.Add(reward, r)
+		}
+	}
+	log.Warn("accumulateRewards", "reward", reward)
+	state.AddBalance(header.Coinbase, common.SystemAssetID, reward)
 }
 
 // Seal generates a new sealing request for the given input block and pushes

@@ -34,7 +34,7 @@ import (
 	"github.com/FusionFoundation/efsn/event"
 	"github.com/FusionFoundation/efsn/log"
 	"github.com/FusionFoundation/efsn/params"
-	//"github.com/davecgh/go-spew/spew"
+	"github.com/davecgh/go-spew/spew"
 	mapset "github.com/deckarep/golang-set"
 )
 
@@ -356,13 +356,11 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		case <-w.startCh:
 			clearPending(w.chain.CurrentBlock().NumberU64())
 			timestamp = time.Now().Unix()
-			log.Info("w.startCh")
 			commit(false, commitInterruptNewHead)
 
 		case head := <-w.chainHeadCh:
 			clearPending(head.Block.NumberU64())
 			timestamp = time.Now().Unix()
-			log.Info("w.chainHeadCh", "head.Block.Number", head.Block.NumberU64(), "head.Block.Hash", head.Block.Hash())
 			commit(false, commitInterruptNewHead)
 
 		case <-timer.C:
@@ -395,7 +393,6 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			}
 
 		case adjust := <-w.resubmitAdjustCh:
-			log.Info("w.resubmitAdjustCh", "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase)
 			// Adjust resubmit interval by feedback.
 			if adjust.inc {
 				before := recommit
@@ -432,11 +429,9 @@ func (w *worker) mainLoop() {
 	for {
 		select {
 		case req := <-w.newWorkCh:
-			log.Info("w.newWorkCh", "w.chain.CurrentBlock().Number", w.chain.CurrentBlock().NumberU64(), "w.chain.CurrentBlock().Hash", w.chain.CurrentBlock().Hash(), "coinbase", w.chain.CurrentBlock().Coinbase())
 			w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
 
 		case ev := <-w.chainSideCh:
-			continue//need uncle block rewards
 			if _, exist := w.possibleUncles[ev.Block.Hash()]; exist {
 				continue
 			}
@@ -588,7 +583,7 @@ func (w *worker) resultLoop() {
 			}
 			if w.engine.HaveBroaded(block.Header(), block) {
 				log.Warn("resultLoop", "dt.HaveBroaded", "", "number", block.NumberU64())
-				//continue
+				continue
 			}
 			// Different block could share same sealhash, deep copy here to prevent write-write conflict.
 			var (
@@ -649,11 +644,13 @@ func (w *worker) makeCurrent(parent *types.Block, header *types.Header) error {
 	}
 	env := &environment{
 		signer:    types.NewEIP155Signer(w.config.ChainID),
+		//state:     state,
 		state:     state.Copy(),
 		ancestors: mapset.NewSet(),
 		family:    mapset.NewSet(),
 		uncles:    mapset.NewSet(),
-		header:    header,
+		//header:    header,
+		header:    types.CopyHeader(header),
 	}
 
 	// when 08 is processed ancestors contain 07 (quick block)

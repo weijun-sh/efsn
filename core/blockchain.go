@@ -43,7 +43,7 @@ import (
 	"github.com/FusionFoundation/efsn/params"
 	"github.com/FusionFoundation/efsn/rlp"
 	"github.com/FusionFoundation/efsn/trie"
-	//"github.com/davecgh/go-spew/spew"
+	"github.com/davecgh/go-spew/spew"
 	lru "github.com/hashicorp/golang-lru"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
 )
@@ -1162,7 +1162,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		statedb, err := state.New(parent.Root(), bc.stateCache)
 		state := statedb.Copy()//TODO
 		if err != nil {
-			log.Warn("Err", "state.New", "return")
+			log.Warn("Err", "bc.WriteBlockWithState", "return")
 			return i, events, coalescedLogs, err
 		}
 		// Process block using the parent state as reference point.
@@ -1180,6 +1180,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			log.Warn("Err", "bc.Validator().ValidateState", "", "err", err)
+			spew.Printf("bc.Validator, block: %#v\n", block)
 			return i, events, coalescedLogs, err
 		}
 		proctime := time.Since(bstart)
@@ -1187,7 +1188,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		// Write the block to the chain and get the status.
 		status, err := bc.WriteBlockWithState(block, receipts, state)
 		if err != nil {
-			log.Warn("Err", "bc.WriteBlockWithState", "return")
+			log.Warn("bc.WriteBlockWithState", "err", err)
 			return i, events, coalescedLogs, err
 		}
 		switch status {
@@ -1205,8 +1206,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			bc.gcproc += proctime
 
 		case SideStatTy:
-			log.Info("Inserted forked block", "number", block.Number(), "hash", block.Hash(), "diff", block.Difficulty(), "block.ParentHash", block.ParentHash(), "coinbase", block.Coinbase(), "elapsed",
-				common.PrettyDuration(time.Since(bstart)), "txs", len(block.Transactions()), "gas", block.GasUsed(), "uncles", len(block.Uncles()))
+			log.Info("Inserted fork block", "number", block.Number(), "hash", block.Hash(), "diff", block.Difficulty(), "block.ParentHash", block.ParentHash(), "coinbase", block.Coinbase(), "uncles", len(block.Uncles()),
+				"txs", len(block.Transactions()), "gas", block.GasUsed(), "elapsed", common.PrettyDuration(time.Since(bstart)))
 
 			blockInsertTimer.UpdateSince(bstart)
 			events = append(events, ChainSideEvent{block})

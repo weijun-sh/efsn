@@ -1168,3 +1168,4 @@ func (self *StateDB) GetTrieValueByKey(key []byte) []byte {
 		return nil
 	}
 }
+
