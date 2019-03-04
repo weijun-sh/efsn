@@ -136,7 +136,7 @@ func (dt *DaTong) verifyHeader(chain consensus.ChainReader, header *types.Header
 	log.Info("verifyHeader", "header.Number", header.Number, "header.Hash", header.Hash, "header.UncleHash", header.UncleHash, "emptyUncleHash", emptyUncleHash)
 	if header.UncleHash != emptyUncleHash {
 		log.Info("consensus.verifyheadererr invalid uncle hash ")
-		//return consensus.ErrInvalidUncleHash
+		//return errInvalidUncleHash
 	}
 
 	if header.Time.Cmp(big.NewInt(time.Now().Unix())) > 0 {
@@ -618,7 +618,6 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	bb := headerState.GetBalance(common.SystemAssetID, header.Coinbase)
 	log.Info("before Finalize rewards", "header.Number", header.Number, "header.Difficulty", header.Difficulty, "coinbase", header.Coinbase, "coinbase.balance BBBBefore", bb)
 	headerState.AddBalance(header.Coinbase, common.SystemAssetID, calcRewards(header.Number))
-	//dt.accumulateRewards(chain.Config(), headerState, header, uncles)
 	ba := headerState.GetBalance(common.SystemAssetID, header.Coinbase)
 	log.Info("after  Finalize rewards", "header.Number", header.Number, "header.Difficulty", header.Difficulty, "coinbase", header.Coinbase, "coinbase.balance AAAAAfter", ba)
 
@@ -628,30 +627,6 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	//spew.Printf("Finalize: header: %#v, txs: %#v, receipts: %#v\n", header, txs, receipts)
 	//return types.NewBlock(header, txs, nil, receipts), nil
 	return types.NewBlock(header, txs, uncles, receipts), nil
-}
-
-// AccumulateRewards credits the coinbase of the given block with the mining
-// reward. The total reward consists of the static block reward and rewards for
-// included uncles. The coinbase of each uncle block is also rewarded.
-func (dt *DaTong)accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) {
-	// Accumulate the rewards for the miner and any included uncles
-	reward := calcRewards(header.Number)
-	if header.Coinbase != dt.signer {
-		r := calcRewards(header.Number)
-		for _, uncle := range uncles {
-			log.Warn("accumulateRewards", "uncle", uncle)
-			r.Add(uncle.Number, big8)
-			r.Sub(r, header.Number)
-			r.Mul(r, blockReward)
-			r.Div(r, big8)
-			state.AddBalance(uncle.Coinbase, common.SystemAssetID, r)
-
-			r.Div(blockReward, big32)
-			reward.Add(reward, r)
-		}
-	}
-	log.Warn("accumulateRewards", "reward", reward)
-	state.AddBalance(header.Coinbase, common.SystemAssetID, reward)
 }
 
 // Seal generates a new sealing request for the given input block and pushes

@@ -1159,8 +1159,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		} else {
 			parent = chain[i-1]
 		}
-		statedb, err := state.New(parent.Root(), bc.stateCache)
-		state := statedb.Copy()//TODO
+		state, err := state.New(parent.Root(), bc.stateCache)
 		if err != nil {
 			log.Warn("Err", "bc.WriteBlockWithState", "return")
 			return i, events, coalescedLogs, err
@@ -1370,7 +1369,8 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	oldBlock2 := oldChain[len(oldChain)-1:][0]
 	newBlock2 := newChain[len(newChain)-1:][0]
 	if newBlock2.Difficulty().Cmp(oldBlock2.Difficulty()) < 0 {
-		return fmt.Errorf("reorg: ")
+		log.Info("reorg", "newBlock2.Difficulty < oldBlock2.Difficulty", "")
+		//return fmt.Errorf("reorg: ")
 	}
 
 	// Ensure the user sees large reorgs

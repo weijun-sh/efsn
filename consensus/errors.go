@@ -34,6 +34,4 @@ var (
 	// ErrInvalidNumber is returned if a block's number doesn't equal it's parent's
 	// plus one.
 	ErrInvalidNumber = errors.New("invalid block number")
-
-	ErrInvalidUncleHash = errors.New("non empty uncle hash")
 )

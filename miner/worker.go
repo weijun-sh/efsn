@@ -34,7 +34,7 @@ import (
 	"github.com/FusionFoundation/efsn/event"
 	"github.com/FusionFoundation/efsn/log"
 	"github.com/FusionFoundation/efsn/params"
-	"github.com/davecgh/go-spew/spew"
+	//"github.com/davecgh/go-spew/spew"
 	mapset "github.com/deckarep/golang-set"
 )
 
@@ -645,13 +645,11 @@ func (w *worker) makeCurrent(parent *types.Block, header *types.Header) error {
 	}
 	env := &environment{
 		signer:    types.NewEIP155Signer(w.config.ChainID),
-		//state:     state,
-		state:     state.Copy(),
+		state:     state,
 		ancestors: mapset.NewSet(),
 		family:    mapset.NewSet(),
 		uncles:    mapset.NewSet(),
-		//header:    header,
-		header:    types.CopyHeader(header),
+		header:    header,
 	}
 
 	// when 08 is processed ancestors contain 07 (quick block)
