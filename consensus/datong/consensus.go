@@ -824,10 +824,10 @@ func (dt *DaTong) selectTickets(tickets []*common.Ticket, parent *types.Header, 
 			}
 		}
 	}
-	sort.Sort(ticketSlice{
+	sort.Sort(sort.Reverse(ticketSlice{
 		data:         selectedTickets,
 		isSortWeight: true,
-	})
+	}))
 	return selectedTickets
 }
 
