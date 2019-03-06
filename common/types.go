@@ -461,11 +461,11 @@ type AssetValueChangeParam struct {
 
 // AssetValueChangeExParam wacom
 type AssetValueChangeExParam struct {
-	AssetID Hash
-	To      Address
-	Value   *big.Int `json:",string"`
-	IsInc   bool
-	TransacData string 
+	AssetID     Hash
+	To          Address
+	Value       *big.Int `json:",string"`
+	IsInc       bool
+	TransacData string
 }
 
 // TimeLockParam wacom
@@ -576,7 +576,7 @@ type Asset struct {
 	CanChange bool
 }
 
-func (u *Asset) DeepCopy() Asset{
+func (u *Asset) DeepCopy() Asset {
 	total := *u.Total
 	return Asset{
 		ID:        u.ID,
@@ -637,7 +637,7 @@ func (t *Ticket) DeepCopy() Ticket {
 	if w != nil {
 		wt = &(*w)
 	}
-	return Ticket {
+	return Ticket{
 		ID:         t.ID,
 		Owner:      t.Owner,
 		Height:     &height,
@@ -673,6 +673,31 @@ type Swap struct {
 	SwapSize      *big.Int `json:",string"`
 	Targes        []Address
 	Time          *big.Int // Provides information for TIME
+}
+
+func (s *Swap) DeepCopy() Swap {
+	minFromAmount := *s.MinFromAmount
+	minToAmount := *s.MinToAmount
+	swapSize := *s.SwapSize
+	swapTime := *s.Time
+	targets := make([]Address, len(s.Targes))
+	copy(targets, s.Targes)
+
+	return Swap{
+		ID:            s.ID,
+		Owner:         s.Owner,
+		FromAssetID:   s.FromAssetID,
+		FromStartTime: s.FromStartTime,
+		FromEndTime:   s.FromEndTime,
+		MinFromAmount: &minFromAmount,
+		ToAssetID:     s.ToAssetID,
+		ToStartTime:   s.ToStartTime,
+		ToEndTime:     s.ToEndTime,
+		MinToAmount:   &minToAmount,
+		SwapSize:      &swapSize,
+		Targes:        targets,
+		Time:          &swapTime,
+	}
 }
 
 // KeyValue wacom

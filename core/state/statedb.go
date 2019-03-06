@@ -607,31 +607,33 @@ func (self *StateDB) Copy() *StateDB {
 		state.preimages[hash] = preimage
 	}
 
+	// Above, we don't copy the actual notation/assets/tickets/swap.
+	// This means that if the copy is copied, the loop above will be a no-op, since the
+	// copy's notation/assets/tickets/swap is empty.
+	// Thus, here we iterate over them, to enable copies of copies
 	if self.notations != nil {
 		state.notations = make([]common.Address, len(self.notations))
 		copy(state.notations, self.notations)
 	}
-
 	if self.assets != nil {
 		state.assets = make(map[common.Hash]common.Asset, len(self.assets))
 		for hash, asset := range self.assets {
 			state.assets[hash] = asset.DeepCopy()
 		}
 	}
-
 	if self.tickets != nil {
 		state.tickets = make(map[common.Hash]common.Ticket, len(self.tickets))
 		for hash, ticket := range self.tickets {
 			state.tickets[hash] = ticket.DeepCopy()
 		}
 	}
-
 	if self.swaps != nil {
 		state.swaps = make(map[common.Hash]common.Swap)
 		for hash, swap := range self.swaps {
-			state.swaps[hash] = swap
+			state.swaps[hash] = swap.DeepCopy()
 		}
 	}
+
 	return state
 }
 
