@@ -772,7 +772,8 @@ func (c ticketSlice) Less(i, j int) bool {
 		log.Debug("ticketSlice Less", "c.data[i].ID", c.data[i].ID, "c.data[j].ID", c.data[j].ID)
 		if c.data[i].Weight().Cmp(c.data[j].Weight()) == 0 {
 			log.Debug("ticketSlice Less weight", " = ", "")
-			return c.data[i].ID.String() < c.data[j].ID.String() //sort by ticketID
+			//return c.data[i].ID.String() < c.data[j].ID.String() //sort by ticketID
+			return c.data[j].ID.String() < c.data[i].ID.String() //sort by ticketID, see sort.Reverse
 		}
 		return c.data[i].Weight().Cmp(c.data[j].Weight()) < 0
 	}
@@ -1169,10 +1170,10 @@ func (dt *DaTong) sortByWeightAndID(tickets []*common.Ticket, parent *types.Head
 			//}
 		}
 	}
-	sort.Sort(ticketSlice{
+	sort.Sort(sort.Reverse(ticketSlice{
 		data:         selectedTickets,
 		isSortWeight: true,
-	})
+	}))
 	return selectedTickets
 }
 
