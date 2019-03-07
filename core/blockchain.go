@@ -991,6 +991,8 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 		return NonStatTy, err
 	}
 
+	// (auto) buy ticket
+	common.AutoBuyTicketChan <- 1
 	// Set new head.
 	if status == CanonStatTy {
 		bc.insert(block)

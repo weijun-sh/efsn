@@ -655,7 +655,7 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results 
 	}
 	delay := time.Unix(ticketTime.Int64(), 0).Sub(time.Now())
 	log.Info("Seal", "header.Time", header.Time, "time.Now()", time.Now().Unix())
-	if header.Number.Cmp(common.Big1) > 0 && delay < 0 {
+	if /*header.Number.Cmp(common.Big1) > 0 &&*/ delay < 0 {
 		log.Info("Seal()", "delay", delay)
 		// delay < 0, delay rand( 1 ~ 2000 ms )
 		wiggle := time.Duration(4) * wiggleTime

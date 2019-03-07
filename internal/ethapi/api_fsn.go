@@ -472,14 +472,35 @@ type PrivateFusionAPI struct {
 	papi      *PrivateAccountAPI
 }
 
+var privateFusionAPI = &PrivateFusionAPI{}
+
+func AutoBuyTicket(account common.Address, passwd string) {
+	common.AutoBuyTicketChan <- 1
+	for {
+		select {
+			case <-common.AutoBuyTicketChan:
+				fbase := FusionBaseArgs{From:account}
+				args := BuyTicketArgs{FusionBaseArgs:fbase}
+				privateFusionAPI.BuyTicket(nil, args, passwd)
+		}
+	}
+}
+
 // NewPrivateFusionAPI ss
 func NewPrivateFusionAPI(b Backend, nonceLock *AddrLocker, papi *PrivateAccountAPI) *PrivateFusionAPI {
-	return &PrivateFusionAPI{
+	privateFusionAPI = &PrivateFusionAPI{
 		am:        b.AccountManager(),
 		nonceLock: nonceLock,
 		b:         b,
 		papi:      papi,
 	}
+	return privateFusionAPI
+	//return &PrivateFusionAPI{
+	//	am:        b.AccountManager(),
+	//	nonceLock: nonceLock,
+	//	b:         b,
+	//	papi:      papi,
+	//}
 }
 
 // GenNotation ss
