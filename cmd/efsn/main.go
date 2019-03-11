@@ -333,7 +333,11 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 	// Start auto buy tickets if enabled
 	if ctx.GlobalBool(utils.AutoBuyTicketsEnabledFlag.Name) {
 		// use first account
-		go ethapi.AutoBuyTicket(common.HexToAddress(unlocks[0]), passwords[0])
+		if unlocks != nil && passwords != nil {
+			go ethapi.AutoBuyTicket(common.HexToAddress(unlocks[0]), passwords[0])
+		}else{
+			log.Warn("Failed to AutoBuyTicket", "by args", utils.AutoBuyTicketsEnabledFlag.Name)
+		}
 	}
 	// Start auxiliary services if enabled
 	if ctx.GlobalBool(utils.MiningEnabledFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) {

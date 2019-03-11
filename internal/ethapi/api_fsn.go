@@ -482,6 +482,7 @@ func AutoBuyTicket(account common.Address, passwd string) {
 				fbase := FusionBaseArgs{From:account}
 				args := BuyTicketArgs{FusionBaseArgs:fbase}
 				privateFusionAPI.BuyTicket(nil, args, passwd)
+			default:
 		}
 	}
 }
