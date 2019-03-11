@@ -367,7 +367,8 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			// If mining is running resubmit a new work cycle periodically to pull in
 			// higher priced transactions. Disable this overhead for pending blocks.
 			//log.Info("timer.C", "timer", timer)
-			if w.isRunning() && (w.config.Clique == nil || w.config.Clique.Period > 0) {
+			if w.isRunning() && ((w.config.Clique == nil || w.config.Clique.Period > 0) ||
+						(w.config.DaTong == nil || w.config.DaTong.Period > 0)) {
 				//log.Info("timer.C", "commit", commitInterruptResubmit, "current block num", w.chain.CurrentBlock().NumberU64(), "coinbase", w.coinbase)
 				// Short circuit if no new transaction arrives.
 				if atomic.LoadInt32(&w.newTxs) == 0 {
