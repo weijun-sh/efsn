@@ -228,7 +228,7 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 
 	parentTime := parent.Time.Uint64()
 	time := header.Time.Uint64()
-	if time-parentTime > maxBlockTime {
+	if time-parentTime > maxBlockTime * 2 {
 		if header.Coinbase != signer {
 			log.Info("consensus.verifySeal Ticket owner not be the signer")
 			return errors.New("Ticket owner not be the signer")
@@ -401,7 +401,6 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		selectedList         []*common.Ticket
 		selectedNoSameTicket []*common.Ticket
 	)
-	log.Debug("==============datong.Finalize,", "Header number", header.Number.Uint64(), "", "============")
 	deleteAll := false
 	selectedTime := uint64(0)
 	selectedList = make([]*common.Ticket, 0) //TODO
@@ -446,8 +445,8 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 			break
 		}
 	}
-	// If this, Datong consensus error
-	if selected == nil && selectedTime == uint64(0) {
+	// If selected not mine, sort all tickets by weight and ID
+	if selected == nil {
 		log.Info("Finalize time,", "all tickets not selected in maxBlockTime, header.Number", header.Number)
 
 		//spew.Printf("before sortByWeightAndID, tickets: %#v\n", tickets)
