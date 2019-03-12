@@ -22,6 +22,7 @@ import (
 	"github.com/FusionFoundation/efsn/params"
 	"github.com/FusionFoundation/efsn/rlp"
 	"github.com/FusionFoundation/efsn/rpc"
+	"github.com/davecgh/go-spew/spew"
 )
 
 const (
@@ -403,7 +404,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	// calc balance before selected ticket from stored tickets list
 	ticketsTotalAmount := uint64(len(tickets))
 	parentTime := parent.Time.Uint64()
-	headerTime := parentTime
+	htime := parentTime
 	var (
 		selected             *common.Ticket
 		retreat              []*common.Ticket
@@ -449,7 +450,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		if selected != nil {
 			break
 		}
-		if (headerTime - parentTime) > maxBlockTime {
+		if (htime - parentTime) > maxBlockTime {
 			deleteAll = true
 			break
 		}
@@ -635,7 +636,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	ticketNumber := 0
 
 	for _, t := range ticketMap {
-		if t.ExpireTime <= headerTime {
+		if t.ExpireTime <= htime {
 			delete(ticketMap, t.ID)
 			headerState.RemoveTicket(t.ID)
 			snap.AddLog(&ticketLog{
@@ -883,7 +884,7 @@ func (dt *DaTong) selectTickets(tickets []*common.Ticket, parent *types.Header, 
 	sort.Sort(sort.Reverse(ticketSlice{
 		data:         selectedTickets,
 		isSortWeight: true,
-	})
+	}))
 	return selectedTickets
 }
 
