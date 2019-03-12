@@ -302,8 +302,6 @@ func (dt *DaTong) Prepare(chain consensus.ChainReader, header *types.Header) err
 	return nil
 }
 
-<<<<<<< HEAD
-=======
 // calc tickets total balance
 func calcTotalBalance(tickets []*common.Ticket, state *state.StateDB) *big.Int {
 	total := new(big.Int).SetUint64(uint64(0))
@@ -360,7 +358,6 @@ func PrintTime(s string,t time.Time) {
 	log.Info("=============",ss,common.PrettyDuration(time.Since(t)),"","===============")
 }
 //////////////
->>>>>>> ea7f756... new Algorithm for select tickets
 // Finalize runs any post-transaction state modifications (e.g. block rewards)
 // and assembles the final block.
 // Note: The block header and state database might be updated to reflect any
@@ -417,12 +414,6 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	selectedTime := uint64(0)
 	selectedList = make([]*common.Ticket, 0)
 	for {
-<<<<<<< HEAD
-		headerTime++
-		retreat = make([]*common.Ticket, 0)
-		selectedNoSameTicket = make([]*common.Ticket, 0)
-		s := dt.selectTickets(tickets, parent, headerTime)
-=======
 	        if IsPsnTestnet == true {
 		    break
 		}
@@ -432,7 +423,6 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		selectedNoSameTicket = make([]*common.Ticket, 0) //TODO
 		s := dt.selectTickets(tickets, parent, htime,header)
 		//spew.Printf("Finalize, parent.Number: %+v, htime: %+v, selected ticket: %#v\n", *parent.Number, htime, s)
->>>>>>> ea7f756... new Algorithm for select tickets
 		for _, t := range s {
 			if t.Owner == header.Coinbase {
 				selected = t
@@ -464,13 +454,9 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 			break
 		}
 	}
-<<<<<<< HEAD
-	if selected == nil && selectedTime == uint64(0) {
-=======
 	// If selected not mine, sort all tickets by weight and ID
 	if selected == nil && IsPsnTestnet != true {
 		log.Info("Finalize time,", "all tickets not selected in maxBlockTime, header.Number", header.Number)
->>>>>>> ea7f756... new Algorithm for select tickets
 
 		sortTickets := dt.sortByWeightAndID(tickets, parent, parent.Time.Uint64())
 		for _, t := range sortTickets {
@@ -485,6 +471,46 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 			}
 
 		}
+	}
+
+	if IsPsnTestnet == true {
+	    tmp := time.Now()
+	    selectedTime = uint64(0)
+	    parentHash := parent.Hash()
+	    sel := make(chan *DisInfo, len(tickets))
+	    for i := 0; i < len(tickets); i++ {
+		ticket := tickets[i]
+		w := new(big.Int).Sub(parent.Number, ticket.Height)
+		w = new(big.Int).Add(w,common.Big1)
+		w2 := new(big.Int).Mul(w,w)
+
+		id := new(big.Int).SetBytes(crypto.Keccak256(parentHash[:], ticket.ID[:],[]byte(ticket.Owner.Hex())))
+		id2 := new(big.Int).Mul(id,id)
+		s := new(big.Int).Add(w2,id2)
+
+		ht := &DisInfo{owner:ticket,res:s}
+		sel <- ht
+	    }
+	    var list DistanceSlice
+	    tt := len(sel)
+	    for i:=0;i<tt;i++ {
+		v := <- sel
+		list = append(list, v)
+	}
+	    sort.Sort(list)
+	    for _, t := range list {
+		    if t.owner.Owner == header.Coinbase {
+			    htime = parentTime
+			    selected = t.owner
+			    spew.Printf("selected ticket: %#v, coinbase: 0x%x\n", t, header.Coinbase)
+			    break
+		    } else {
+			    selectedTime++//ticket queue in selectedList
+			    retreat = append(retreat, t.owner)
+		    }
+
+	    }
+	    PrintTime("total calc time",tmp)
 	}
 
 	if IsPsnTestnet == true {
@@ -631,14 +657,6 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 			//weight = weight.Add(weight, common.Big100)                       // one ticket weight eq 100
 			remainingWeight = remainingWeight.Add(remainingWeight, weight)
 
-<<<<<<< HEAD
-			if _, exist := balanceTemp[t.Owner]; !exist {
-				balanceTemp[t.Owner] = true
-				balance := headerState.GetBalance(common.SystemAssetID, t.Owner)
-				balance = new(big.Int).Div(balance, new(big.Int).SetUint64(uint64(1e+18)))
-				totalBalance = totalBalance.Add(totalBalance, balance)
-			}
-=======
 			//log.Info("Finalize", "t.Owner", t.Owner)
 			//if _, exist := balanceTemp[t.Owner]; !exist {
 			//	balanceTemp[t.Owner] = true
@@ -647,7 +665,6 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 			//	totalBalance = totalBalance.Add(totalBalance, balance)
 			//	//log.Info("Finalize", "totalBalance", totalBalance, "balance", balance, "t.Owner", t.Owner)
 			//}
->>>>>>> ea7f756... new Algorithm for select tickets
 		}
 	}
 
@@ -655,14 +672,10 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		return nil, errors.New("Next block don't have ticket, wait buy ticket")
 	}
 
-<<<<<<< HEAD
-	snap.SetWeight(new(big.Int).Add(totalBalance, remainingWeight))
-=======
 	//log.Info("Finalize snap.Set", "totalBalance", totalBalance, "remainingWeight", remainingWeight, "ticketNumber", ticketNumber)
 	//snap.SetWeight(new(big.Int).Add(totalBalance, remainingWeight))
 	log.Info("Finalize snap.Set", "remainingWeight", remainingWeight, "ticketNumber", ticketNumber)
 	snap.SetWeight(remainingWeight)
->>>>>>> ea7f756... new Algorithm for select tickets
 	snap.SetTicketWeight(remainingWeight)
 	snap.SetTicketNumber(ticketNumber)
 
@@ -846,20 +859,6 @@ func (dt *DaTong) selectTickets(tickets []*common.Ticket, parent *types.Header, 
 		tik := tickets[i]
 		if time >= tik.StartTime && tik.ExpireTime > expireTime {
 
-<<<<<<< HEAD
-			times := new(big.Int).Sub(parent.Number, tik.Height)
-			//times = times.Add(times, common.Big1)
-			times = times.Mul(times, big.NewInt(int64(ticketWeightStep)))
-			times = times.Add(times, common.Big100)
-
-			if dt.validateTicket(tik, point, length, times) {
-				tik.SetWeight(times)
-				selectedTickets = append(selectedTickets, tik )
-			}
-		}
-	}
-	sort.Sort(ticketSlice{
-=======
 			times := new(big.Int).Sub(parent.Number, tickets[i].Height)
 			times = times.Add(times, common.Big1)
 			//times = times.Mul(times, big.NewInt(int64(ticketWeightStep)))
@@ -882,7 +881,6 @@ func (dt *DaTong) selectTickets(tickets []*common.Ticket, parent *types.Header, 
 		return selectedTickets
 	}
 	sort.Sort(sort.Reverse(ticketSlice{
->>>>>>> ea7f756... new Algorithm for select tickets
 		data:         selectedTickets,
 		isSortWeight: true,
 	})
