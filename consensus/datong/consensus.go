@@ -1121,4 +1121,3 @@ func (dt *DaTong) calcDelayTime(chain consensus.ChainReader, header *types.Heade
 
 	return delayTime, nil
 }
-
