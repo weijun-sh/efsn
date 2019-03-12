@@ -5,7 +5,6 @@ import (
 	"errors"
 	"math"
 	"math/big"
-//	"math/rand"
 	"sort"
 	"sync"
 	"time"
