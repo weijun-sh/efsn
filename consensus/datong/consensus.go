@@ -5,7 +5,6 @@ import (
 	"errors"
 	"math"
 	"math/big"
-//	"math/rand"
 	"sort"
 	"sync"
 	"time"
@@ -27,7 +26,6 @@ import (
 
 const (
 	wiggleTime = 500 * time.Millisecond // Random delay (per commit) to allow concurrent commits
-	modifier   = uint64(80960000)       // 80960000 * e 18
 	delayTimeModifier	= 20
 )
 
@@ -59,12 +57,11 @@ var (
 	extraSeal                 = 65
 	maxBlockTime       uint64 = 120 // 2 minutes
 	ticketWeightStep          = 2   // 2%
-	SelectedTicketTime        = &selectedTicketTime{time: make(map[common.Hash]*selectedInfo)}
+	SelectedTicketTime        = &selectedTicketTime{info: make(map[common.Hash]*selectedInfo)}
 )
 
 var (
 	emptyUncleHash = types.CalcUncleHash(nil)
-	CurrentCommit  = &currentCommit{Number: new(big.Int).SetUint64(uint64(1)), Size: 0, Broaded: false}
 )
 
 // DaTong wacom
@@ -718,7 +715,6 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results 
 	if number == 0 {
 		return errUnknownBlock
 	}
-	log.Debug("Seal", "block number", number, "block hash", block.Hash().Hex(), "block coinbase", block.Coinbase())
 	dt.lock.RLock()
 	signer, signFn := dt.signer, dt.signFn
 	dt.lock.RUnlock()
@@ -1002,11 +998,12 @@ func GenGenesisExtraData(number *big.Int) []byte {
 type selectedInfo struct {
 	round uint64// selected round
 	list  uint64// tickets number before myself in selected list
+	broad bool
 }
 
 // store selected-ticket spend time
 type selectedTicketTime struct {
-	time map[common.Hash]*selectedInfo
+	info map[common.Hash]*selectedInfo
 	sync.Mutex
 }
 
@@ -1022,101 +1019,64 @@ func updateSelectedTicketTime(header *types.Header, ticketID common.Hash, round 
 	sum := header.Number.String() + ticketID.String() + header.Coinbase.String()
 	hash := crypto.Keccak256([]byte(sum))
 	sl := &selectedInfo{round: round, list: list}
-	SelectedTicketTime.time[common.BytesToHash(hash)] = sl
+	SelectedTicketTime.info[common.BytesToHash(hash)] = sl
 	log.Info("updateSelectedTicketTime", "header.Number", header.Number, "ticketID", ticketID, "round", round, "list", list)
 }
 
 func haveSelectedTicketTime(header *types.Header) (uint64, uint64, error) {
 	SelectedTicketTime.Lock()
 	defer SelectedTicketTime.Unlock()
-	snap, err := newSnapshotWithData(getSnapDataByHeader(header))
-	if err != nil {
-		log.Info("consensus.verifySeal Err newSnapshot ", "err", err.Error())
-		return uint64(0), uint64(0), err
-	}
 
-	ticketID := snap.GetVoteTicket()
-	sum := header.Number.String() + ticketID.String() + header.Coinbase.String()
-	hash := crypto.Keccak256([]byte(sum))
-	ticketTime := SelectedTicketTime.time[common.BytesToHash(hash)]
-	if ticketTime != nil {
-		log.Info("haveSelectedTicketTime", "header.Number", header.Number, "header.Root", header.Root, "time", ticketTime)
-		return ticketTime.round, ticketTime.list, nil
+	hash := calcHeaderHash(header)
+	if hash == nil {
+		return uint64(0), uint64(0), errors.New("Hash return nil")
+	}
+	ticketInfo := SelectedTicketTime.info[common.BytesToHash(hash)]
+	if ticketInfo != nil {
+		log.Info("haveSelectedTicketTime", "header.Number", header.Number, "header.Root", header.Root, "time", ticketInfo)
+		return ticketInfo.round, ticketInfo.list, nil
 	}
 	log.Info("Error: not found ticketTime. haveSelectedTicketTime", "header.Number", header.Number, "header.Root", header.Root)
 	return uint64(0), uint64(0), errors.New("Mismatched SealHash")
 }
 
-type currentCommit struct {
-	Number  *big.Int        `json:"number"           gencodec:"required"`
-	Hash    [20]common.Hash `json:"receiptsRoot"     gencodec:"required"`
-	Size    int
-	Broaded bool //have process: seal and broad
-	sync.Mutex
+func calcHeaderHash(header *types.Header) []byte {
+	snap, err := newSnapshotWithData(getSnapDataByHeader(header))
+	if err != nil {
+		return nil
+	}
+	ticketID := snap.GetVoteTicket()
+	sum := header.Number.String() + ticketID.String() + header.Coinbase.String()
+	return crypto.Keccak256([]byte(sum))
 }
 
-func (dt *DaTong) UpdateCurrentCommit(header *types.Header, block *types.Block, fromResult bool) {
-	CurrentCommit.Lock()
-	defer CurrentCommit.Unlock()
-	log.Info("UpdateCurrentCommit", "CurrentCommit.Number(old)", CurrentCommit.Number)
-	//log.Info("UpdateCurrentCommit", "CurrentCommit.Hash(old)", CurrentCommit.Hash)
-	log.Info("UpdateCurrentCommit", "difficulty", block.Difficulty())
-	if fromResult == true {
-		if block.Coinbase() != dt.signer { //from sync
-			return
-		}
-		if dt.isCommit(header, block) == true {
-			if header.Number.Cmp(CurrentCommit.Number) >= 0 {
-				CurrentCommit.Broaded = true
-				number := *header.Number
-				CurrentCommit.Number = new(big.Int).Set(&number)
-				CurrentCommit.Size = 0
-				log.Info("UpdateCurrentCommit broadcast", "header.Number", header.Number)
-			}
-			//CurrentCommit.Broaded = true
-			//CurrentCommit.Size = 0
-		}
+func (dt *DaTong) UpdateBlockBroadcast(header *types.Header) {
+	SelectedTicketTime.Lock()
+	defer SelectedTicketTime.Unlock()
+
+	hash := calcHeaderHash(header)
+	if hash == nil {
 		return
 	}
-	if header.Number.Cmp(CurrentCommit.Number) > 0 {
-		CurrentCommit.Broaded = false
-		CurrentCommit.Size = 0
-	}
-	if header.Number.Cmp(CurrentCommit.Number) >= 0 {
-		if CurrentCommit.Broaded == true {
-			CurrentCommit.Size = 0
-			return
-		}
-		number := *header.Number
-		CurrentCommit.Number = new(big.Int).Set(&number)
-		CurrentCommit.Hash[CurrentCommit.Size] = dt.SealHash(block.Header())
-		log.Info("UpdateCurrentCommit", "CurrentCommit.Number", CurrentCommit.Number)
-		log.Info("UpdateCurrentCommit", "size", CurrentCommit.Size, "CurrentCommit.Hash", CurrentCommit.Hash[CurrentCommit.Size])
-		if CurrentCommit.Size < 19 {
-			CurrentCommit.Size++
-		}
+	ticketInfo := SelectedTicketTime.info[common.BytesToHash(hash)]
+	if ticketInfo != nil {
+		ticketInfo.broad = true
 	}
 }
 
-func (dt *DaTong) isCommit(header *types.Header, block *types.Block) bool {
-	if header.Number.Cmp(CurrentCommit.Number) != 0 {
+func (dt *DaTong) HaveBlockBroaded(header *types.Header) bool {
+	SelectedTicketTime.Lock()
+	defer SelectedTicketTime.Unlock()
+
+	hash := calcHeaderHash(header)
+	if hash == nil {
 		return false
 	}
-	for i := 0; i < CurrentCommit.Size; i++ {
-		if CurrentCommit.Hash[i] == dt.SealHash(block.Header()) {
-			return true
-		}
+	ticketInfo := SelectedTicketTime.info[common.BytesToHash(hash)]
+	if ticketInfo != nil {
+		return ticketInfo.broad
 	}
 	return false
-}
-
-func (dt *DaTong) HaveBroaded(header *types.Header, block *types.Block) bool {
-	if block.Coinbase() != dt.signer { //from sync
-		return false
-	}
-	CurrentCommit.Lock()
-	defer CurrentCommit.Unlock()
-	return header.Number.Cmp(CurrentCommit.Number) == 0 && CurrentCommit.Broaded
 }
 
 func (dt *DaTong) calcTicketDifficulty(chain consensus.ChainReader, header *types.Header, statedb *state.StateDB) (*big.Int, common.Hash, error) {
@@ -1362,6 +1322,7 @@ func (dt *DaTong) calcDelayTime(chain consensus.ChainReader, header *types.Heade
 			time.Duration(int64(dt.config.Period)) * time.Second) /
 			time.Duration(int64(dt.config.Period))
 	delayTime -= adjust
+	log.Info("calcDelayTime", "header.Number", header.Number, "delayTime", delayTime, "listOrder", list, "header.Time", time.Unix(header.Time.Int64(), 0), "coinbase", header.Coinbase)
 
 	return delayTime, nil
 }
