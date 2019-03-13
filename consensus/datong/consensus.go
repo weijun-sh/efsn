@@ -26,8 +26,7 @@ import (
 
 const (
 	wiggleTime = 500 * time.Millisecond // Random delay (per commit) to allow concurrent commits
-	modifier   = uint64(80960000)       // 80960000 * e 18
-	delayTimeModifier	= 20
+	delayTimeModifier	= 2//20
 )
 
 var (
@@ -109,12 +108,12 @@ func (dt *DaTong) Author(header *types.Header) (common.Address, error) {
 // stock Ethereum ethash engine.
 func (dt *DaTong) verifyHeader(chain consensus.ChainReader, header *types.Header, seal bool, parents []*types.Header) error {
 	if header.Number == nil {
-		log.Info("consensus.verifyheader eerror unknown block ")
+		log.Info("consensus.verifyheader error unknown block ")
 		return errUnknownBlock
 	}
 	// Checkpoint blocks need to enforce zero beneficiary
 	if header.Coinbase == (common.Address{}) {
-		log.Error("verifyHeader", "header.Coinbase", header.Coinbase, "common.Address{}", common.Address{})
+		log.Debug("verifyHeader", "header.Coinbase", header.Coinbase, "common.Address{}", common.Address{})
 		return errCoinbase
 	}
 
@@ -404,6 +403,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	selectedTime := uint64(0)
 	selectedList = make([]*common.Ticket, 0) //TODO
 	for {
+		break
 		htime++
 		retreat = make([]*common.Ticket, 0)
 		selectedNoSameTicket = make([]*common.Ticket, 0) //TODO
@@ -439,15 +439,12 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 			break
 		}
 		if (htime - parentTime) > maxBlockTime {
-			log.Debug("==============datong.Finalize,", "select ticket fail,delete all ticket's height < header.Number", "", "============")
 			deleteAll = true
 			break
 		}
 	}
 	// If selected not mine, sort all tickets by weight and ID
 	if selected == nil {
-		log.Info("Finalize time,", "all tickets not selected in maxBlockTime, header.Number", header.Number)
-
 		//spew.Printf("before sortByWeightAndID, tickets: %#v\n", tickets)
 		sortTickets := dt.sortByWeightAndID(tickets, parent, parent.Time.Uint64())
 		//spew.Printf("sortByWeightAndID, sortTickets: %#v\n", sortTickets)
@@ -469,7 +466,6 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	if selected == nil {
 		return nil, errors.New("myself tickets not selected in maxBlockTime")
 	}
-	log.Info("Finalize time", "htime", htime, "selectedRound", htime - parentTime)
 
 	updateSelectedTicketTime(header, selected.ID, htime - parentTime, selectedTime)
 	snap := newSnapshot()
@@ -572,13 +568,11 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 			weight = weight.Add(weight, common.Big100)                       // one ticket weight eq 100
 			remainingWeight = remainingWeight.Add(remainingWeight, weight)
 
-			//log.Info("Finalize", "t.Owner", t.Owner)
 			if _, exist := balanceTemp[t.Owner]; !exist {
 				balanceTemp[t.Owner] = true
 				balance := headerState.GetBalance(common.SystemAssetID, t.Owner)
 				balance = new(big.Int).Div(balance, new(big.Int).SetUint64(uint64(1e+18)))
 				totalBalance = totalBalance.Add(totalBalance, balance)
-				//log.Info("Finalize", "totalBalance", totalBalance, "balance", balance, "t.Owner", t.Owner)
 			}
 		}
 	}
@@ -587,15 +581,14 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		return nil, errors.New("Next block don't have ticket, wait buy ticket")
 	}
 
-	log.Info("Finalize snap.Set", "totalBalance", totalBalance, "remainingWeight", remainingWeight, "ticketNumber", ticketNumber)
 	snap.SetWeight(new(big.Int).Add(totalBalance, remainingWeight))
 	snap.SetTicketWeight(remainingWeight)
 	snap.SetTicketNumber(ticketNumber)
 
 	// cacl difficulty
-	log.Info("Finalize", "selectedList", selectedList, "header.Number", header.Number, "coinbase", header.Coinbase)
+	//log.Info("Finalize", "selectedList", selectedList, "header.Number", header.Number, "coinbase", header.Coinbase)
 	ticketsTotal := ticketsTotalAmount - selectedTime
-	log.Info("Finalize", "header.Number", header.Number, "header.Difficulty", ticketsTotal, "= ticketsTotalAmount", ticketsTotalAmount, "- ticketsBefore", selectedTime)
+	//log.Info("Finalize", "header.Number", header.Number, "header.Difficulty", ticketsTotal, "= ticketsTotalAmount", ticketsTotalAmount, "- ticketsBefore", selectedTime)
 	header.Difficulty = new(big.Int).SetUint64(ticketsTotal)
 
 	snapBytes := snap.Bytes()
@@ -606,7 +599,6 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	headerState.AddBalance(header.Coinbase, common.SystemAssetID, calcRewards(header.Number))
 
 	header.Root = headerState.IntermediateRoot(chain.Config().IsEIP158(header.Number))
-	log.Info("Finalize", "header.Root", header.Root.Hex(), "header.Number", header.Number)
 	//header.UncleHash = types.CalcUncleHash(nil)
 	//spew.Printf("Finalize: header: %#v, txs: %#v, receipts: %#v\n", header, txs, receipts)
 	//return types.NewBlock(header, txs, nil, receipts), nil
@@ -710,10 +702,8 @@ func (dt *DaTong) getAllTickets(chain consensus.ChainReader, header *types.Heade
 	}
 	var parent *types.Header
 	if len(parents) > 0 {
-		// log.Info("  getAllTickets use past headers ")
 		parent = parents[len(parents)-1]
 	} else {
-		// log.Info("  getAllTickets get header with parent hash ")
 		parent = chain.GetHeader(header.ParentHash, number-1)
 	}
 
@@ -918,7 +908,6 @@ func updateSelectedTicketTime(header *types.Header, ticketID common.Hash, round 
 	hash := crypto.Keccak256([]byte(sum))
 	sl := &selectedInfo{round: round, list: list}
 	SelectedTicketTime.time[common.BytesToHash(hash)] = sl
-	log.Info("updateSelectedTicketTime", "header.Number", header.Number, "ticketID", ticketID, "round", round, "list", list)
 }
 
 func haveSelectedTicketTime(header *types.Header) (uint64, uint64, error) {
@@ -953,9 +942,6 @@ type currentCommit struct {
 func (dt *DaTong) UpdateCurrentCommit(header *types.Header, block *types.Block, fromResult bool) {
 	CurrentCommit.Lock()
 	defer CurrentCommit.Unlock()
-	log.Info("UpdateCurrentCommit", "CurrentCommit.Number(old)", CurrentCommit.Number)
-	//log.Info("UpdateCurrentCommit", "CurrentCommit.Hash(old)", CurrentCommit.Hash)
-	log.Info("UpdateCurrentCommit", "difficulty", block.Difficulty())
 	if fromResult == true {
 		if block.Coinbase() != dt.signer { //from sync
 			return
@@ -966,7 +952,6 @@ func (dt *DaTong) UpdateCurrentCommit(header *types.Header, block *types.Block, 
 				number := *header.Number
 				CurrentCommit.Number = new(big.Int).Set(&number)
 				CurrentCommit.Size = 0
-				log.Info("UpdateCurrentCommit broadcast", "header.Number", header.Number)
 			}
 			//CurrentCommit.Broaded = true
 			//CurrentCommit.Size = 0
@@ -985,8 +970,6 @@ func (dt *DaTong) UpdateCurrentCommit(header *types.Header, block *types.Block, 
 		number := *header.Number
 		CurrentCommit.Number = new(big.Int).Set(&number)
 		CurrentCommit.Hash[CurrentCommit.Size] = dt.SealHash(block.Header())
-		log.Info("UpdateCurrentCommit", "CurrentCommit.Number", CurrentCommit.Number)
-		log.Info("UpdateCurrentCommit", "size", CurrentCommit.Size, "CurrentCommit.Hash", CurrentCommit.Hash[CurrentCommit.Size])
 		if CurrentCommit.Size < 19 {
 			CurrentCommit.Size++
 		}
@@ -1064,6 +1047,7 @@ func (dt *DaTong) calcTicketDifficulty(chain consensus.ChainReader, header *type
 	selectedTime := uint64(0)
 	selectedList = make([]*common.Ticket, 0)
 	for {
+		break
 		htime++
 		retreat = make([]*common.Ticket, 0)
 		selectedNoSameTicket = make([]*common.Ticket, 0)

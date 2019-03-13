@@ -321,7 +321,6 @@ func (self *StateDB) HasSuicided(addr common.Address) bool {
 
 // AddBalance adds amount to the account associated with addr.
 func (self *StateDB) AddBalance(addr common.Address, assetID common.Hash, amount *big.Int) {
-	log.Info("AddBalance", "addr", addr, "assetID", assetID, "amount", amount)
 	stateObject := self.GetOrNewStateObject(addr)
 	if stateObject != nil {
 		stateObject.AddBalance(assetID, amount)
@@ -386,8 +385,6 @@ func (self *StateDB) SetState(addr common.Address, key, value common.Hash) {
 }
 
 func (self *StateDB) SetData(addr common.Address, value []byte) {
-	log.Debug("SetData", "addr", addr, "value", value)
-
 	stateObject := self.GetOrNewStateObject(addr)
 	if stateObject != nil {
 		stateObject.SetCode(crypto.Keccak256Hash(value), value)
@@ -444,7 +441,6 @@ func (self *StateDB) updateStateObject(stateObject *stateObject) {
 	if err != nil {
 		panic(fmt.Errorf("can't encode object at %x: %v", addr[:], err))
 	}
-	log.Debug("updateStateObject", "update to trie, key", addr.Hex(), "value", data)
 	self.setError(self.trie.TryUpdate(addr[:], data))
 }
 
@@ -944,10 +940,8 @@ func (db *StateDB) AllTickets() (map[common.Hash]common.Ticket, error) {
 
 // AddTicket wacom
 func (db *StateDB) AddTicket(ticket common.Ticket) error {
-	fmt.Printf("======statedb.go,AddTicket,==============\n")
 	tickets, err := db.AllTickets()
 	if err != nil {
-		log.Debug("AddTicket: unable to retrieve previous tickets")
 		return err
 	}
 	if _, ok := tickets[ticket.ID]; ok {
@@ -1147,27 +1141,5 @@ func (s sortableSwapLURSlice) Less(i, j int) bool {
 
 func (s sortableSwapLURSlice) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
-}
-
-func (self *StateDB) GetStateObject(addr common.Address) *stateObject {
-	return self.getStateObject(addr)
-}
-
-func (self *StateDB) GetAccounts() []common.Address {
-	ret := make([]common.Address, 0)
-	for k, _ := range self.stateObjects {
-		ret = append(ret, k)
-	}
-
-	return ret
-}
-
-func (self *StateDB) GetTrieValueByKey(key []byte) []byte {
-	ret, err := self.trie.TryGet(key)
-	if err == nil {
-		return ret
-	} else {
-		return nil
-	}
 }
 
