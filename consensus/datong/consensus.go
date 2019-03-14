@@ -26,7 +26,7 @@ import (
 
 const (
 	wiggleTime = 500 * time.Millisecond // Random delay (per commit) to allow concurrent commits
-	delayTimeModifier	= 20
+	delayTimeModifier	= 30
 )
 
 var (
@@ -1277,7 +1277,7 @@ func (dt *DaTong) calcDelayTime(chain consensus.ChainReader, header *types.Heade
 		}else {
 			delayTime = time.Duration(1) * time.Second
 		}
-	}else if delayTime < delayTimeModifier {
+	}else if delayTime < (time.Duration(list * uint64(delayTimeModifier)) * time.Second) {
 		if list > 0 {
 			delayTime += time.Duration(list * uint64(delayTimeModifier)) * time.Second
 		}
@@ -1291,9 +1291,9 @@ func (dt *DaTong) calcDelayTime(chain consensus.ChainReader, header *types.Heade
 	gparent := chain.GetHeaderByNumber(header.Number.Uint64()-3)
 	adjust := ((time.Unix(parent.Time.Int64(), 0).Sub(time.Unix(gparent.Time.Int64(), 0)) / 2) -
 			time.Duration(int64(dt.config.Period)) * time.Second) /
-			time.Duration(int64(dt.config.Period))
+			time.Duration(int64(3))
 	delayTime -= adjust
-	log.Info("calcDelayTime", "header.Number", header.Number, "delayTime", delayTime, "listOrder", list, "header.Time", time.Unix(header.Time.Int64(), 0), "coinbase", header.Coinbase)
+	log.Info("calcDelayTime", "header.Number", header.Number, "delayTime", delayTime, "listOrder", list, "adjustTime", adjust, "header.Time", time.Unix(header.Time.Int64(), 0), "coinbase", header.Coinbase)
 
 	return delayTime, nil
 }

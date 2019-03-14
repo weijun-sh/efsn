@@ -588,7 +588,7 @@ func (w *worker) resultLoop() {
 				continue
 			}
 			//spew.Printf("w.chain.WriteBlockWithState, block: %#v\n", block)
-			w.engine.UpdateBlockBroadcast(w.current.header)
+			w.engine.UpdateBlockBroadcast(block.Header())
 			log.Info("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
 				"difficulty", block.Difficulty(),
 				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
