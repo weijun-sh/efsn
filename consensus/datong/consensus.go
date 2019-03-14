@@ -552,6 +552,20 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		    }
 
 	    }
+
+	    //bug
+	    norep := make(map[common.Address]bool)
+	    for _,nr := range retreat {
+		_,ok := norep[nr.Owner]
+		if ok == false {
+		    norep[nr.Owner]=true
+		}
+	    }
+	    log.Info("===========datong.Finalize","include repeat selecteTime",selectedTime,"","=================")
+	    selectedTime = uint64(len(norep))
+	    log.Info("===========datong.Finalize","no repeat selecteTime",selectedTime,"","=================")
+	    //
+
 	    PrintTime("total calc time",tmp)
 	}
 	if selected == nil {
@@ -1219,6 +1233,20 @@ func (dt *DaTong) calcTicketDifficulty(chain consensus.ChainReader, header *type
 		    }
 
 	    }
+
+	    //bug
+	    norep := make(map[common.Address]bool)
+	    for _,nr := range retreat {
+		_,ok := norep[nr.Owner]
+		if ok == false {
+		    norep[nr.Owner]=true
+		}
+	    }
+	    log.Info("===========datong.Finalize","include repeat selecteTime",selectedTime,"","=================")
+	    selectedTime = uint64(len(norep))
+	    log.Info("===========datong.Finalize","no repeat selecteTime",selectedTime,"","=================")
+	    //
+
 	    PrintTime("total calc time",tmp)
 	}
 	if selected == nil {
