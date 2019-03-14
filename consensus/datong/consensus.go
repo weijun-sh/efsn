@@ -26,7 +26,8 @@ import (
 
 const (
 	wiggleTime = 500 * time.Millisecond // Random delay (per commit) to allow concurrent commits
-	delayTimeModifier	= 30
+	delayTimeModifier	= 30 // adjust factor
+	adjustIntervalBlocks	= 10 // adjust delay time by blocks
 )
 
 var (
@@ -1328,6 +1329,17 @@ func (dt *DaTong) calcDelayTime(chain consensus.ChainReader, header *types.Heade
 	newBlockTime := new(big.Int).Add(header.Time, new(big.Int).SetUint64(dt.config.Period - 2))
 	delayTime := time.Unix(newBlockTime.Int64(), 0).Sub(time.Now())
 	delayTime += time.Duration(list * uint64(delayTimeModifier)) * time.Second
+	if header.Number.Uint64() < (adjustIntervalBlocks + 2) {
+		return delayTime, nil
+	}
+
+	// adjust = ( ( parent - gparent ) / 2 - (dt.config.Period) ) / dt.config.Period
+	parent := chain.GetHeaderByNumber(header.Number.Uint64() - 1)
+	gparent := chain.GetHeaderByNumber(header.Number.Uint64() - 1 - adjustIntervalBlocks)
+	adjust := ((time.Unix(parent.Time.Int64(), 0).Sub(time.Unix(gparent.Time.Int64(), 0)) / adjustIntervalBlocks) -
+			time.Duration(int64(dt.config.Period)) * time.Second) /
+			time.Duration(int64(adjustIntervalBlocks))
+	delayTime -= adjust
 	if delayTime < 0 {
 		if list > 0 {
 			delayTime = time.Duration(list * uint64(delayTimeModifier)) * time.Second
@@ -1339,19 +1351,7 @@ func (dt *DaTong) calcDelayTime(chain consensus.ChainReader, header *types.Heade
 			delayTime += time.Duration(list * uint64(delayTimeModifier)) * time.Second
 		}
 	}
-	if header.Number.Uint64() < 4 {
-		return delayTime, nil
-	}
-
-	// adjust = ( ( parent - gparent ) / 2 - (dt.config.Period) ) / dt.config.Period
-	parent := chain.GetHeaderByNumber(header.Number.Uint64()-1)
-	gparent := chain.GetHeaderByNumber(header.Number.Uint64()-3)
-	adjust := ((time.Unix(parent.Time.Int64(), 0).Sub(time.Unix(gparent.Time.Int64(), 0)) / 2) -
-			time.Duration(int64(dt.config.Period)) * time.Second) /
-			time.Duration(int64(3))
-	delayTime -= adjust
 	log.Info("calcDelayTime", "header.Number", header.Number, "delayTime", delayTime, "listOrder", list, "adjustTime", adjust, "header.Time", time.Unix(header.Time.Int64(), 0), "coinbase", header.Coinbase)
-
 	return delayTime, nil
 }
 
