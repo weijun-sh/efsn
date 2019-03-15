@@ -1,0 +1,42 @@
+diff --git a/consensus/datong/consensus.go b/consensus/datong/consensus.go
+index db0fb0e..4e19be9 100644
+--- a/consensus/datong/consensus.go
++++ b/consensus/datong/consensus.go
+@@ -26,9 +26,9 @@ import (
+ )
+ 
+ const (
+-	wiggleTime = 500 * time.Millisecond // Random delay (per commit) to allow concurrent commits
+-	modifier   = uint64(80960000)       // 80960000 * e 18
+-	delayTimeModifier	= 1/*20*/
++	wiggleTime	 		= 500 * time.Millisecond // Random delay (per commit) to allow concurrent commits
++	modifier   			= uint64(80960000)       // 80960000 * e 18
++	delayTimeModifier	= 5						 /*20*/
+ )
+ 
+ var (
+@@ -406,6 +406,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
+ 	selectedTime := uint64(0)
+ 	selectedList = make([]*common.Ticket, 0) //TODO
+ 	for {
++		break
+ 		htime++
+ 		retreat = make([]*common.Ticket, 0)
+ 		selectedNoSameTicket = make([]*common.Ticket, 0) //TODO
+@@ -653,7 +654,7 @@ func (dt *DaTong) Seal(chain consensus.ChainReader, block *types.Block, results
+ 			return err
+ 		}
+ 	}
+-	delay := time.Unix(ticketTime.Int64(), 0).Sub(time.Now())
++	delay := time.Unix(ticketTime.Int64(), 0).Sub(time.Now()) + 5 //perf-debug
+ 	log.Info("Seal", "header.Time", header.Time, "time.Now()", time.Now().Unix())
+ 	if /*header.Number.Cmp(common.Big1) > 0 &&*/ delay < 0 {
+ 		log.Info("Seal()", "delay", delay)
+@@ -1077,6 +1078,7 @@ func (dt *DaTong) calcTicketDifficulty(chain consensus.ChainReader, header *type
+ 	selectedTime := uint64(0)
+ 	selectedList = make([]*common.Ticket, 0)
+ 	for {
++		break
+ 		htime++
+ 		retreat = make([]*common.Ticket, 0)
+ 		selectedNoSameTicket = make([]*common.Ticket, 0)
