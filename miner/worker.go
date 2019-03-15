@@ -458,8 +458,8 @@ func (w *worker) mainLoop() {
 						uncles = append(uncles, uncle.Header())
 						return false
 					})
-					//w.commit(uncles, nil, true, start)
-					w.commitNewWork(nil, false, start.Unix())
+					w.commit(uncles, nil, true, start)
+					//w.commitNewWork(nil, false, start.Unix())
 				}
 			}
 

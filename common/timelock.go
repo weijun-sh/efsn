@@ -83,7 +83,8 @@ type TimeLock struct {
 
 // NewTimeLock wacom
 func NewTimeLock(items ...*TimeLockItem) *TimeLock {
-	timeLock := TimeLock{}
+	//timeLock := TimeLock{}
+	timeLock := TimeLock{} /////???? caihaijun,changed  sortTime
 	timeLock.SetItems(items)
 	return &timeLock
 }
@@ -163,7 +164,11 @@ func (z *TimeLock) Cmp(x *TimeLock) int {
 
 // Clone wacom
 func (z *TimeLock) Clone() *TimeLock {
-	return NewTimeLock(z.Items...)
+	//return NewTimeLock(z.Items...)
+	t := NewTimeLock(z.Items...)
+	t.changed = z.changed
+	t.sortTime = z.sortTime
+	return t
 }
 
 func (u *TimeLockItem) MarshalJSON() ([]byte, error) {
