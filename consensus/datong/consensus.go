@@ -28,6 +28,7 @@ const (
 	wiggleTime = 500 * time.Millisecond // Random delay (per commit) to allow concurrent commits
 	delayTimeModifier	= 30 // adjust factor
 	adjustIntervalBlocks	= 10 // adjust delay time by blocks
+
 )
 
 var (
@@ -59,6 +60,7 @@ var (
 	maxBlockTime       uint64 = 120 // 2 minutes
 	ticketWeightStep          = 2   // 2%
 	SelectedTicketTime        = &selectedTicketTime{info: make(map[common.Hash]*selectedInfo)}
+	maxTickets                = new(big.Int).SetBytes(maxBytes)
 )
 
 var (
@@ -559,6 +561,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	    for _,nr := range retreat {
 		_,ok := norep[nr.Owner]
 		if ok == false {
+			log.Info("Finalize before me", "ticket.Owner", nr.Owner)
 		    norep[nr.Owner]=true
 		}
 	    }
@@ -1022,6 +1025,17 @@ type selectedTicketTime struct {
 	sync.Mutex
 }
 
+func calcHeaderHash(header *types.Header) []byte {
+	snap, err := newSnapshotWithData(getSnapDataByHeader(header))
+	if err != nil {
+		return nil
+	}
+	ticketID := snap.GetVoteTicket()
+	// hash (header.Number + ticketID + header.Coinbase)
+	sum := header.Number.String() + ticketID.String() + header.Coinbase.String()
+	return crypto.Keccak256([]byte(sum))
+}
+
 func updateSelectedTicketTime(header *types.Header, ticketID common.Hash, round uint64, list uint64) {
 	if (header == nil || ticketID == common.Hash{}) {
 		log.Warn("updateSelectedTicketTime", "input error", "")
@@ -1033,9 +1047,16 @@ func updateSelectedTicketTime(header *types.Header, ticketID common.Hash, round 
 	// hash (header.Number + ticketID + header.Coinbase)
 	sum := header.Number.String() + ticketID.String() + header.Coinbase.String()
 	hash := crypto.Keccak256([]byte(sum))
-	sl := &selectedInfo{round: round, list: list}
-	SelectedTicketTime.info[common.BytesToHash(hash)] = sl
-	log.Info("updateSelectedTicketTime", "header.Number", header.Number, "ticketID", ticketID, "round", round, "list", list)
+	ticketInfo := SelectedTicketTime.info[common.BytesToHash(hash)]
+	if ticketInfo == nil {
+		sl := &selectedInfo{round: round, list: list, broad: false}
+		SelectedTicketTime.info[common.BytesToHash(hash)] = sl
+		ticketInfo = SelectedTicketTime.info[common.BytesToHash(hash)]
+	} else {
+		ticketInfo.round = round
+		ticketInfo.list = list
+	}
+	log.Info("updateSelectedTicketTime", "header.Number", header.Number, "ticketID", ticketID, "round", round, "listOrder", list)
 }
 
 func haveSelectedTicketTime(header *types.Header) (uint64, uint64, error) {
@@ -1047,22 +1068,12 @@ func haveSelectedTicketTime(header *types.Header) (uint64, uint64, error) {
 		return uint64(0), uint64(0), errors.New("Hash return nil")
 	}
 	ticketInfo := SelectedTicketTime.info[common.BytesToHash(hash)]
-	if ticketInfo != nil {
-		log.Info("haveSelectedTicketTime", "header.Number", header.Number, "header.Root", header.Root, "time", ticketInfo)
-		return ticketInfo.round, ticketInfo.list, nil
+	if ticketInfo == nil {
+		log.Warn("Error: not found ticketInfo. SelectedTicketTime", "header.Number", header.Number)
+		return uint64(0), uint64(0), errors.New("not found ticketInfo")
 	}
-	log.Info("Error: not found ticketTime. haveSelectedTicketTime", "header.Number", header.Number, "header.Root", header.Root)
-	return uint64(0), uint64(0), errors.New("Mismatched SealHash")
-}
-
-func calcHeaderHash(header *types.Header) []byte {
-	snap, err := newSnapshotWithData(getSnapDataByHeader(header))
-	if err != nil {
-		return nil
-	}
-	ticketID := snap.GetVoteTicket()
-	sum := header.Number.String() + ticketID.String() + header.Coinbase.String()
-	return crypto.Keccak256([]byte(sum))
+	log.Info("haveSelectedTicketTime", "header.Number", header.Number, "ticketInfo", ticketInfo)
+	return ticketInfo.round, ticketInfo.list, nil
 }
 
 func (dt *DaTong) UpdateBlockBroadcast(header *types.Header) {
@@ -1074,7 +1085,12 @@ func (dt *DaTong) UpdateBlockBroadcast(header *types.Header) {
 		return
 	}
 	ticketInfo := SelectedTicketTime.info[common.BytesToHash(hash)]
-	if ticketInfo != nil {
+	log.Info("UpdateBlockBroadcast", "ticketInfo.broad", ticketInfo.broad, "->", "true", "number", header.Number)
+	if ticketInfo == nil {
+		sl := &selectedInfo{round: maxTickets.Uint64(), list: maxTickets.Uint64(), broad: true}
+		SelectedTicketTime.info[common.BytesToHash(hash)] = sl
+		ticketInfo = SelectedTicketTime.info[common.BytesToHash(hash)]
+	} else {
 		ticketInfo.broad = true
 	}
 }
@@ -1088,10 +1104,11 @@ func (dt *DaTong) HaveBlockBroaded(header *types.Header) bool {
 		return false
 	}
 	ticketInfo := SelectedTicketTime.info[common.BytesToHash(hash)]
-	if ticketInfo != nil {
-		return ticketInfo.broad
+	if ticketInfo == nil {
+		return false
 	}
-	return false
+	log.Info("HaveBlockBroaded", "ticketInfo.broad", ticketInfo.broad, "number", header.Number)
+	return ticketInfo.broad
 }
 
 func (dt *DaTong) calcTicketDifficulty(chain consensus.ChainReader, header *types.Header, statedb *state.StateDB) (*big.Int, common.Hash, error) {
@@ -1346,9 +1363,11 @@ func (dt *DaTong) calcDelayTime(chain consensus.ChainReader, header *types.Heade
 		}else {
 			delayTime = time.Duration(1) * time.Second
 		}
-	}else if delayTime < (time.Duration(list * uint64(delayTimeModifier)) * time.Second) {
+	} else {
 		if list > 0 {
-			delayTime += time.Duration(list * uint64(delayTimeModifier)) * time.Second
+			if delayTime < (time.Duration(list * uint64(delayTimeModifier)) * time.Second) {
+				delayTime += time.Duration(list * uint64(delayTimeModifier)) * time.Second
+			}
 		}
 	}
 	log.Info("calcDelayTime", "header.Number", header.Number, "delayTime", delayTime, "listOrder", list, "adjustTime", adjust, "header.Time", time.Unix(header.Time.Int64(), 0), "coinbase", header.Coinbase)
