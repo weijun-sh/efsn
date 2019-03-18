@@ -312,10 +312,6 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 // rules of a particular engine. The changes are executed inline.
 func (dt *DaTong) Prepare(chain consensus.ChainReader, header *types.Header) error {
 	//header.Coinbase = common.BytesToAddress(dt.signer[:])
-	if header.Coinbase == (common.Address{}) {
-		log.Error("Prepare", "header.Coinbase", header.Coinbase, "common.Address{}", common.Address{})
-		return errCoinbase
-	}
 	log.Info("Prepare", "header.Number", header.Number, "coinbase", header.Coinbase)
 	number := header.Number.Uint64()
 	parent := chain.GetHeader(header.ParentHash, number-1)
@@ -640,6 +636,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 				//	EndTime:   t.ExpireTime,
 				//	Value:     t.Value,
 				//})
+				//delete tickets if selected miner did not Seal
 				//headerState.AddTimeLockBalance(t.Owner, common.SystemAssetID, value)
 			}
 			snap.AddLog(&ticketLog{
