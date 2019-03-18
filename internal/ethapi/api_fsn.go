@@ -476,13 +476,12 @@ var privateFusionAPI = &PrivateFusionAPI{}
 
 func AutoBuyTicket(account common.Address, passwd string) {
 	common.AutoBuyTicketChan <- 1
+	fbase := FusionBaseArgs{From:account}
+	args := BuyTicketArgs{FusionBaseArgs:fbase}
 	for {
 		select {
-			case <-common.AutoBuyTicketChan:
-				fbase := FusionBaseArgs{From:account}
-				args := BuyTicketArgs{FusionBaseArgs:fbase}
-				privateFusionAPI.BuyTicket(nil, args, passwd)
-			default:
+		case <- common.AutoBuyTicketChan:
+			privateFusionAPI.BuyTicket(nil, args, passwd)
 		}
 	}
 }
