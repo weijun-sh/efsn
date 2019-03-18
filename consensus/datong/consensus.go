@@ -560,8 +560,8 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 	    norep := make(map[common.Address]bool)
 	    for _,nr := range retreat {
 		_,ok := norep[nr.Owner]
+		log.Info("Finalize before me", "ticket.Owner", nr.Owner, "ticket.ID", nr.ID)
 		if ok == false {
-			log.Info("Finalize before me", "ticket.Owner", nr.Owner)
 		    norep[nr.Owner]=true
 		}
 	    }
@@ -635,12 +635,12 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 			delete(ticketMap, t.ID)
 			headerState.RemoveTicket(t.ID)
 			if t.Height.Cmp(common.Big0) > 0 {
-				value := common.NewTimeLock(&common.TimeLockItem{
-					StartTime: t.StartTime,
-					EndTime:   t.ExpireTime,
-					Value:     t.Value,
-				})
-				headerState.AddTimeLockBalance(t.Owner, common.SystemAssetID, value)
+				//value := common.NewTimeLock(&common.TimeLockItem{
+				//	StartTime: t.StartTime,
+				//	EndTime:   t.ExpireTime,
+				//	Value:     t.Value,
+				//})
+				//headerState.AddTimeLockBalance(t.Owner, common.SystemAssetID, value)
 			}
 			snap.AddLog(&ticketLog{
 				TicketID: t.ID,
