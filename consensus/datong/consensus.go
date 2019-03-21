@@ -25,7 +25,7 @@ import (
 
 const (
 	wiggleTime           = 500 * time.Millisecond // Random delay (per commit) to allow concurrent commits
-	delayTimeModifier    = 30                     // adjust factor
+	delayTimeModifier    = 20                     // adjust factor
 	adjustIntervalBlocks = 10                     // adjust delay time by blocks
 )
 
@@ -1171,11 +1171,10 @@ func (dt *DaTong) calcDelayTime(chain consensus.ChainReader, header *types.Heade
 		time.Duration(int64(dt.config.Period))*time.Second) /
 		time.Duration(int64(adjustIntervalBlocks))
 	delayTime -= adjust
-	if delayTime < 0 {
+	if delayTime < (time.Duration(5) * time.Second) {
+		delayTime = time.Duration(5) * time.Second
 		if list > 0 {
-			delayTime = time.Duration(list*uint64(delayTimeModifier)) * time.Second
-		} else {
-			delayTime = time.Duration(1) * time.Second
+			delayTime += time.Duration(list*uint64(delayTimeModifier)) * time.Second
 		}
 	} else if delayTime < (time.Duration(list*uint64(delayTimeModifier)) * time.Second) {
 		if list > 0 {
