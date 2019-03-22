@@ -708,7 +708,6 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 // It is called in between transactions to get the root hash that
 // goes into transaction receipts.
 func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
-	s.UpdateTickets2DB(s.tickets)
 	s.Finalise(deleteEmptyObjects)
 	return s.trie.Hash()
 }
@@ -1003,26 +1002,6 @@ func (db *StateDB) RemoveTickets(deleteMap []common.Hash) error {
 func (db *StateDB) updateTickets(tickets map[common.Hash]common.Ticket) error {
 	db.tickets = tickets
 
-	//var list sortableTicketsLURSlice
-	//for k, v := range tickets {
-	//	res := ticketsStruct{
-	//		HASH:   k,
-	//		TICKET: v,
-	//	}
-	//	list = append(list, res)
-	//}
-
-	//sort.Sort(list)
-	//data, err := rlp.EncodeToBytes(&list)
-
-	//if err != nil {
-	//	return err
-	//}
-	//db.SetData(common.TicketKeyAddress, data)
-	return nil
-}
-
-func (db *StateDB) UpdateTickets2DB(tickets map[common.Hash]common.Ticket) error {
 	var list sortableTicketsLURSlice
 	for k, v := range tickets {
 		res := ticketsStruct{
@@ -1039,8 +1018,6 @@ func (db *StateDB) UpdateTickets2DB(tickets map[common.Hash]common.Ticket) error
 		return err
 	}
 	db.SetData(common.TicketKeyAddress, data)
-	list = nil
-	data = nil
 	return nil
 }
 
