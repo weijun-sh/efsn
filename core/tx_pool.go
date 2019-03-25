@@ -25,7 +25,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/FusionFoundation/efsn/rlp"
 	"github.com/FusionFoundation/efsn/common"
 	"github.com/FusionFoundation/efsn/common/prque"
 	"github.com/FusionFoundation/efsn/core/state"
@@ -623,11 +622,6 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 	if pool.all.Get(hash) != nil {
 		log.Trace("Discarding already known transaction", "hash", hash)
 		return false, fmt.Errorf("known transaction: %x", hash)
-	}
-
-	if pool.all.HasTicket(pool,tx) {
-	    log.Debug("=========the miner has buy ticket already.===============")
-		return false,errors.New("the miner has buy ticket already.")
 	}
 
 	// If the transaction fails basic validation, discard it
@@ -1272,34 +1266,3 @@ func (t *txLookup) Remove(hash common.Hash) {
 	delete(t.all, hash)
 }
 
-func (t *txLookup) HasTicket(pool *TxPool,tx *types.Transaction) bool {
-    	if pool == nil || tx == nil || pool.signer == nil {
-	    log.Info("======HasTicketTx,param error.=======")
-	    return false
-	}
-
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	
-	param := common.FSNCallParam{}
-	rlp.DecodeBytes(tx.Data(), &param)
-	if param.Func != common.BuyTicketFunc {
-	    log.Info("======HasTicketTx,tx is not ticket transaction.=======")
-	    return false
-	}
-
-	miner, _ := types.Sender(pool.signer, tx)
-	for _, value := range t.all {
-	    param = common.FSNCallParam{}
-	    rlp.DecodeBytes(value.Data(), &param)
-
-	    if param.Func == common.BuyTicketFunc {
-		from, _ := types.Sender(pool.signer, value)
-		if from == miner {
-		    return true
-		}
-	    }
-	}
-
-	return false
-}
