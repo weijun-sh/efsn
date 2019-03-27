@@ -1177,13 +1177,16 @@ func (dt *DaTong) calcDelayTime(chain consensus.ChainReader, header *types.Heade
 		adjust = -stampSecond
 	}
 	delayTime -= adjust
+	modifierTime := time.Duration(list*uint64(delayTimeModifier)) * time.Second
 	if delayTime < 0 {
 		if list > 0 {
-			delayTime += time.Duration(list*uint64(delayTimeModifier)) * time.Second
+			delayTime = modifierTime
+		} else {
+			delayTime = time.Duration(1) * time.Second
 		}
-	} else if delayTime < (time.Duration(list*uint64(delayTimeModifier)) * time.Second) {
+	} else if delayTime < modifierTime {
 		if list > 0 {
-			delayTime += time.Duration(list*uint64(delayTimeModifier)) * time.Second
+			delayTime += modifierTime
 		}
 	}
 
