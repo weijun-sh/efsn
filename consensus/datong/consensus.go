@@ -1170,11 +1170,11 @@ func (dt *DaTong) calcDelayTime(chain consensus.ChainReader, header *types.Heade
 	adjust := ((time.Unix(parent.Time.Int64(), 0).Sub(time.Unix(gparent.Time.Int64(), 0)) / adjustIntervalBlocks) -
 		time.Duration(int64(dt.config.Period))*time.Second) /
 		time.Duration(int64(adjustIntervalBlocks))
-	if adjust > (time.Duration(5) * time.Second) {
-		adjust = time.Duration(5) * time.Second
-	}
-	if adjust < (- time.Duration(5) * time.Second) {
-		adjust = - time.Duration(5) * time.Second
+	stampSecond := time.Duration(2) * time.Second
+	if adjust > stampSecond {
+		adjust = stampSecond
+	} else if adjust < -stampSecond {
+		adjust = -stampSecond
 	}
 	delayTime -= adjust
 	if delayTime < 0 {
