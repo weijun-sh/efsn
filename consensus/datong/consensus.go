@@ -25,7 +25,7 @@ import (
 
 const (
 	wiggleTime           = 500 * time.Millisecond // Random delay (per commit) to allow concurrent commits
-	DelayTimeModifier    = 30                     // adjust factor
+	DelayTimeModifier    = 20                     // adjust factor
 	adjustIntervalBlocks = 10                     // adjust delay time by blocks
 )
 
@@ -211,11 +211,6 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 	if header.Coinbase != signer {
 		return errors.New("Ticket owner not be the signer")
 	}
-	parentTime := parent.Time.Uint64()
-	time := header.Time.Uint64()
-	if time-parentTime > maxBlockTime {
-		return nil
-	}
 	// verify ticket
 	snap, err := newSnapshotWithData(getSnapDataByHeader(header))
 	if err != nil {
@@ -255,23 +250,23 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 	if errv != nil {
 		return errv
 	}
-	// check list squence
-	errc := dt.checkListSquence(chain, header, listSq)
-	if errc != nil {
-		return errc
-	}
 	// check ticket ID
 	if tk.ID != ticketID {
 		return errors.New("verifySeal ticketID mismatch")
 	}
 	// check ticket info
 	errt := dt.checkTicketInfo(header, tk)
-	if errc != nil {
+	if errt != nil {
 		return errt
 	}
 	// check difficulty
 	if diff.Cmp(header.Difficulty) != 0 {
 		return errors.New("verifySeal difficulty mismatch")
+	}
+	// check block time
+	errc := dt.checkBlockTime(chain, header, listSq)
+	if errc != nil {
+		return errc
 	}
 
 	return nil
@@ -1170,13 +1165,14 @@ func (dt *DaTong) calcDelayTime(chain consensus.ChainReader, header *types.Heade
 
 	// delayTime = ParentTime + (15 - 2) - time.Now
 	parent := chain.GetHeaderByNumber(header.Number.Uint64() - 1)
-	endTime := new(big.Int).Add(parent.Time, new(big.Int).SetUint64(list * uint64(DelayTimeModifier) + dt.config.Period-2))
+	endTime := new(big.Int).Add(header.Time, new(big.Int).SetUint64(list * uint64(DelayTimeModifier) + dt.config.Period-2))
 	delayTime := time.Unix(endTime.Int64(), 0).Sub(time.Now())
 	log.Info("calcDelayTime", "list", list, "delayTime", delayTime, "parent.Time", time.Unix(parent.Time.Int64(), 0), "header.Time", time.Unix(header.Time.Int64(), 0), "number", header.Number, "coinbase", header.Coinbase, "header.hash", header.Hash().Hex())
 
 	// delay maximum is 2 minuts
-	if (list * uint64(DelayTimeModifier)) > maxBlockTime {
-		endTime := new(big.Int).Add(parent.Time, new(big.Int).SetUint64(maxBlockTime + dt.config.Period-2))
+
+	if (new(big.Int).Sub(endTime, header.Time)).Uint64() > maxBlockTime {
+		endTime = new(big.Int).Add(header.Time, new(big.Int).SetUint64(maxBlockTime + dt.config.Period - 2 + list))
 		delayTime = time.Unix(endTime.Int64(), 0).Sub(time.Now())
 		log.Info("calcDelayTime", "(> 2 minutes) delayTime", delayTime, "list", list, "number", header.Number, "coinbase", header.Coinbase, "header.hash", header.Hash().Hex())
 	}
@@ -1200,20 +1196,20 @@ func (dt *DaTong) calcDelayTime(chain consensus.ChainReader, header *types.Heade
 	return delayTime, nil
 }
 
-// check list squence
-func (dt *DaTong) checkListSquence(chain consensus.ChainReader, header *types.Header, list uint64) error {
-	log.Info("checkListSquence", "list", list, "header.Number.Uint64()", header.Number.Uint64(), "header.hash", header.Hash().Hex())
+// check block time
+func (dt *DaTong) checkBlockTime(chain consensus.ChainReader, header *types.Header, list uint64) error {
+	log.Info("checkBlockTime", "list", list, "header.Number.Uint64()", header.Number.Uint64(), "header.hash", header.Hash().Hex())
 	if list > 0 { // No.1 pass, check others
 		parentChk := chain.GetHeaderByNumber(header.Number.Uint64() - 1)
 		recvTime := time.Now().Sub(time.Unix(parentChk.Time.Int64(), 0))
-		//if recvTime < (time.Duration(int64(maxBlockTime + dt.config.Period))*time.Second) { // < 120 s
-			eventTime := time.Duration(dt.config.Period - 4)*time.Second + time.Duration(list * uint64(DelayTimeModifier)) * time.Second // period - 4 + list * 30
-			log.Info("checkListSquence", "header.Number.Uint64()", header.Number.Uint64(), "recvTime", recvTime, "eventTime", eventTime, "header.hash", header.Hash().Hex())
+		if recvTime < (time.Duration(int64(maxBlockTime + dt.config.Period))*time.Second) { // < 120 s
+			eventTime := time.Duration(dt.config.Period)*time.Second + time.Duration(list * uint64(DelayTimeModifier)) * time.Second
+			log.Info("checkBlockTime", "header.Number.Uint64()", header.Number.Uint64(), "recvTime", recvTime, "eventTime", eventTime, "header.hash", header.Hash().Hex())
 			if recvTime < eventTime {
-				log.Warn("checkListSquence, discard", "header.Number.Uint64()", header.Number.Uint64(), "recvTime", recvTime, "eventTime", eventTime, "header.hash", header.Hash().Hex())
+				log.Warn("checkBlockTime, discard", "header.Number.Uint64()", header.Number.Uint64(), "recvTime", recvTime, "eventTime", eventTime, "header.hash", header.Hash().Hex())
 				return errors.New("check Squence mismatch")
 			}
-		//}
+		}
 	}
 	return nil
 }
@@ -1222,19 +1218,16 @@ func (dt *DaTong) checkListSquence(chain consensus.ChainReader, header *types.He
 func (dt *DaTong) checkTicketInfo(header *types.Header, ticket *common.Ticket) error {
 	// check height
 	if ticket.Height.Cmp(header.Number) >= 0 {
-		log.Warn("checkTicketInfo ticket height mismatch")
 		return errors.New("checkTicketInfo ticket height mismatch")
 	}
 	// check start and expire time
 	if ticket.ExpireTime <= ticket.StartTime ||
-	   ticket.ExpireTime > (ticket.StartTime + 30*24*3600) ||
+	   ticket.ExpireTime < (ticket.StartTime + 30*24*3600) ||
 	   ticket.ExpireTime < header.Time.Uint64() {
-		log.Warn("checkTicketInfo ticket ExpireTime mismatch")
 		return errors.New("checkTicketInfo ticket ExpireTime mismatch")
 	}
 	// check value
-	if ticket.Value.Cmp(common.TicketPrice()) != 0 {
-		log.Warn("checkTicketInfo ticket Value mismatch")
+	if ticket.Value.Cmp(common.TicketPrice()) < 0 {
 		return errors.New("checkTicketInfo ticket Value mismatch")
 	}
 
