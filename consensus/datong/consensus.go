@@ -21,6 +21,7 @@ import (
 	"github.com/FusionFoundation/efsn/params"
 	"github.com/FusionFoundation/efsn/rlp"
 	"github.com/FusionFoundation/efsn/rpc"
+	"github.com/davecgh/go-spew/spew"
 )
 
 const (
@@ -264,7 +265,7 @@ func (dt *DaTong) verifySeal(chain consensus.ChainReader, header *types.Header, 
 		return errors.New("verifySeal difficulty mismatch")
 	}
 	// check block time
-	errc := dt.checkBlockTime(chain, header, listSq)
+	errc := dt.checkBlockTime(chain, header, parent, listSq)
 	if errc != nil {
 		return errc
 	}
@@ -500,6 +501,7 @@ func (dt *DaTong) Finalize(chain consensus.ChainReader, header *types.Header, st
 		return nil, errors.New("myself tickets not selected in maxBlockTime")
 	}
 
+	spew.Printf("Finalize, header.Number: %v, retreat: %#v\n", header.Number.Uint64(), retreat)
 	updateSelectedTicketTime(header, selected.ID, htime-parentTime, selectedTime)
 	snap := newSnapshot()
 
@@ -1197,11 +1199,10 @@ func (dt *DaTong) calcDelayTime(chain consensus.ChainReader, header *types.Heade
 }
 
 // check block time
-func (dt *DaTong) checkBlockTime(chain consensus.ChainReader, header *types.Header, list uint64) error {
+func (dt *DaTong) checkBlockTime(chain consensus.ChainReader, header *types.Header, parent *types.Header, list uint64) error {
 	log.Info("checkBlockTime", "list", list, "header.Number.Uint64()", header.Number.Uint64(), "header.hash", header.Hash().Hex())
 	if list > 0 { // No.1 pass, check others
-		parentChk := chain.GetHeaderByNumber(header.Number.Uint64() - 1)
-		recvTime := time.Now().Sub(time.Unix(parentChk.Time.Int64(), 0))
+		recvTime := time.Now().Sub(time.Unix(parent.Time.Int64(), 0))
 		if recvTime < (time.Duration(int64(maxBlockTime + dt.config.Period))*time.Second) { // < 120 s
 			eventTime := time.Duration(dt.config.Period)*time.Second + time.Duration(list * uint64(DelayTimeModifier)) * time.Second
 			log.Info("checkBlockTime", "header.Number.Uint64()", header.Number.Uint64(), "recvTime", recvTime, "eventTime", eventTime, "header.hash", header.Hash().Hex())
