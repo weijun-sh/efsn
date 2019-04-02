@@ -1188,6 +1188,7 @@ func (dt *DaTong) calcDelayTime(chain consensus.ChainReader, header *types.Heade
 		}
 		delayTime -= adjust
 	}
+	log.Info("calcDelayTime", "list", list, "delayTime", delayTime, "header.number", header.Number.Uint64())
 
 	return delayTime, nil
 }
