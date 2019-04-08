@@ -1355,6 +1355,9 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 		deletedTxs = append(deletedTxs, oldBlock.Transactions()...)
 		collectLogs(oldBlock.Hash())
 
+		log.Info("===== reorg old", "number", oldBlock.Number(), "hash", oldBlock.Hash(), "coinbase", oldBlock.Coinbase(), "diffculty", oldBlock.Difficulty())
+		log.Info("===== reorg new", "number", newBlock.Number(), "hash", newBlock.Hash(), "coinbase", newBlock.Coinbase(), "diffculty", newBlock.Difficulty())
+
 		oldBlock, newBlock = bc.GetBlock(oldBlock.ParentHash(), oldBlock.NumberU64()-1), bc.GetBlock(newBlock.ParentHash(), newBlock.NumberU64()-1)
 		if oldBlock == nil {
 			return fmt.Errorf("Invalid old chain")

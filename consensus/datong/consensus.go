@@ -33,7 +33,7 @@ const (
 
 	maxNumberOfDeletedTickets = 5 // maximum number of tickets to be deleted because not mining block in time
 
-	PSN20CheckAttackEnableHeight = 80000 // check attack after this height
+	PSN20CheckAttackEnableHeight = 100 //80000 // check attack after this height
 )
 
 var (
@@ -892,6 +892,7 @@ func (dt *DaTong) calcBlockDifficulty(chain consensus.ChainReader, header *types
 		}
 	}
 
+	log.Info("===== calcBlockDifficulty", "height", header.Number.Uint64(), "difficulty", difficulty, "order", selectedTime, "ticketsTotalAmount", ticketsTotalAmount)
 	return difficulty, selected, selectedTime, retreat, nil
 }
 
@@ -959,6 +960,7 @@ func (dt *DaTong) calcDelayTime(chain consensus.ChainReader, header *types.Heade
 		delayTime -= adjust
 	}
 
+	log.Info("===== calcDelayTime", "order", list, "delayTime", delayTime, "height", header.Number.Uint64())
 	return delayTime, nil
 }
 
@@ -989,6 +991,7 @@ func (dt *DaTong) checkBlockTime(chain consensus.ChainReader, header *types.Head
 	recvTime := time.Now().Sub(time.Unix(parent.Time.Int64(), 0))
 	if recvTime < (time.Duration(int64(maxBlockTime+dt.config.Period)) * time.Second) { // < 120 s
 		expectTime := time.Duration(dt.config.Period)*time.Second + time.Duration(list*uint64(delayTimeModifier))*time.Second
+		log.Info("===== checkBlockTime", "order", list, "recvTime", recvTime, "expectTime", expectTime, "height", header.Number.Uint64())
 		if recvTime < expectTime {
 			return fmt.Errorf("block time mismatch: order: %v, receive: %v, expect: %v.", list, recvTime, expectTime)
 		}
