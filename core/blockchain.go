@@ -1159,6 +1159,31 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 				return i, events, coalescedLogs, err
 			}
 
+		case err == consensus.ErrReorgBlock:
+			currentBlock := bc.CurrentBlock()
+			if block.NumberU64() > currentBlock.NumberU64() {
+				var parent *types.Block
+				if i < 2 {
+				      parent = bc.GetBlock(currentBlock.ParentHash(), currentBlock.NumberU64()-1)
+				} else {
+					parent = chain[i-2]
+				}
+				state, errs := state.New(parent.Root(), bc.stateCache)
+				if errs != nil {
+					return i, events, coalescedLogs, errs
+				}
+				// Write other block data using a batch.
+				batch := bc.db.NewBatch()
+				// Reorganise the chain if the parent is not the head block
+				if errr := bc.reorg(currentBlock, parent); errr == nil {
+					// Write the positional metadata for transaction/receipt lookups and preimages
+					rawdb.WriteTxLookupEntries(batch, parent)
+					rawdb.WritePreimages(batch, parent.NumberU64(), state.Preimages())
+				}
+			}
+			bc.reportBlock(block, nil, err)
+			return i, events, coalescedLogs, err
+
 		case err != nil:
 			bc.reportBlock(block, nil, err)
 			return i, events, coalescedLogs, err

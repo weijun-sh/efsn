@@ -936,6 +936,7 @@ func (dt *DaTong) calcDelayTime(chain consensus.ChainReader, header *types.Heade
 	// delayTime = ParentTime + (15 - 2) - time.Now
 	parent := chain.GetHeaderByNumber(header.Number.Uint64() - 1)
 	endTime := new(big.Int).Add(header.Time, new(big.Int).SetUint64(list*uint64(delayTimeModifier)+dt.config.Period-2))
+	//endTime := new(big.Int).Add(header.Time, new(big.Int).SetUint64(dt.config.Period-7))
 	delayTime := time.Unix(endTime.Int64(), 0).Sub(time.Now())
 
 	// delay maximum is 2 minuts
@@ -990,11 +991,39 @@ func (dt *DaTong) checkBlockTime(chain consensus.ChainReader, header *types.Head
 	}
 	recvTime := time.Now().Sub(time.Unix(parent.Time.Int64(), 0))
 	if recvTime < (time.Duration(int64(maxBlockTime+dt.config.Period)) * time.Second) { // < 120 s
-		expectTime := time.Duration(dt.config.Period)*time.Second + time.Duration(list*uint64(delayTimeModifier))*time.Second
+		expectTime := time.Duration(list*uint64(delayTimeModifier))*time.Second
 		log.Info("===== checkBlockTime", "order", list, "recvTime", recvTime, "expectTime", expectTime, "height", header.Number.Uint64())
 		if recvTime < expectTime {
 			return fmt.Errorf("block time mismatch: order: %v, receive: %v, expect: %v.", list, recvTime, expectTime)
 		}
 	}
+	if header.Number.Uint64() >= PSN20CheckAttackEnableHeight {
+		if header.Number.Uint64() < 3 {
+			return nil
+		}
+
+		parentCD := chain.GetHeader(parent.ParentHash, parent.Number.Uint64()-1)
+		statedb, errs := state.New(parentCD.Root, dt.stateCache)
+		if errs != nil {
+			return errs
+		}
+		_, _, list, _, errv := dt.calcBlockDifficulty(chain, parent, statedb)
+		if errv != nil {
+			return errv
+		}
+		if list <= 0 { // No.1 pass, check others
+			return nil
+		}
+
+		recvTime := time.Unix(header.Time.Int64(), 0).Sub(time.Unix(parent.Time.Int64(), 0))
+		if recvTime < (time.Duration(int64(maxBlockTime)) * time.Second) { // < 120 s
+			expectTime := time.Duration(list*uint64(delayTimeModifier))*time.Second
+			if recvTime < expectTime {
+				log.Warn("block time mismatch", "order", list, "receive", recvTime, "expect", expectTime)
+				return consensus.ErrReorgBlock
+			}
+		}
+	}
 	return nil
 }
+
