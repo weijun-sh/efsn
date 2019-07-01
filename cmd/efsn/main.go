@@ -123,6 +123,7 @@ var (
 		utils.DeveloperPeriodFlag,
 		utils.TestnetFlag,
 		utils.RinkebyFlag,
+		utils.DevnetFlag,
 		utils.VMEnableDebugFlag,
 		utils.NetworkIdFlag,
 		utils.RPCCORSDomainFlag,
@@ -278,6 +279,11 @@ func geth(ctx *cli.Context) error {
 // miner.
 func startNode(ctx *cli.Context, stack *node.Node) {
 	debug.Memsize.Add("node", stack)
+
+	// add more log and checking in devnet
+	if ctx.GlobalBool(utils.DevnetFlag.Name) {
+		common.DebugMode = true
+	}
 
 	// Start up the node itself
 	utils.StartNode(stack)
